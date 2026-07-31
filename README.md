@@ -32,13 +32,17 @@ Project structure:
 
     wind-n-cloud/
       data-processing/
+        cors_enabled_http_server.py
+        extract_insv_frame_csv.py
+        prepare_web_dataset.py
         sample-data/
-          extract_insv_frame_csv.py
-          prepare_web_dataset.py
           sample-ydvr.csv
 
       web/
-        future web application
+        src/
+        index.html
+        package.json
+        tsconfig.json
 
       README.md
 
@@ -63,14 +67,21 @@ The output is a web dataset containing JSON files that the web application can l
 
 ## Web application layer
 
-The web app will:
+The web app:
 
-- load a dataset manifest from S3 or CloudFront;
-- load wind samples from JSON;
-- stream MP4 video segments from S3 or CloudFront;
-- present one continuous race timeline;
-- show synchronized cloud video and wind history;
-- hide artificial Insta360 clip boundaries from the user.
+- loads a dataset manifest from a local server, S3, or CloudFront;
+- loads wind samples from JSON;
+- streams MP4 video segments;
+- presents one continuous race timeline;
+- shows synchronized cloud video and wind history;
+- hides artificial Insta360 clip boundaries from the user.
+
+The app is implemented with:
+
+- Vite
+- React
+- TypeScript
+- SVG/D3-style plotting utilities for the wind history display
 
 ---
 
@@ -105,7 +116,7 @@ The default history window is:
 
     60 minutes
 
-This duration should be user-selectable later, for example:
+This duration is user-selectable, for example:
 
 - 5 minutes
 - 15 minutes
@@ -173,7 +184,7 @@ The resulting CSV has one row per video frame.
 
 Example command:
 
-    python data-processing/sample-data/extract_insv_frame_csv.py \
+    python data-processing/extract_insv_frame_csv.py \
       /path/to/insv-files \
       --csv /path/to/source-ydvr.csv \
       --output /path/to/insv-frame-data.csv \
@@ -181,7 +192,7 @@ Example command:
 
 Useful debug option, limit the number of clips:
 
-    python data-processing/sample-data/extract_insv_frame_csv.py \
+    python data-processing/extract_insv_frame_csv.py \
       /path/to/insv-files \
       --csv /path/to/source-ydvr.csv \
       --output /path/to/insv-frame-data.csv \
@@ -190,7 +201,7 @@ Useful debug option, limit the number of clips:
 
 Useful debug option, limit the number of frames per clip:
 
-    python data-processing/sample-data/extract_insv_frame_csv.py \
+    python data-processing/extract_insv_frame_csv.py \
       /path/to/insv-files \
       --csv /path/to/source-ydvr.csv \
       --output /path/to/insv-frame-data.csv \
@@ -222,15 +233,13 @@ Recommended video format:
 - H.264 video
 - AAC audio if audio is needed
 
-Export MP4 file using Insta360 Studio with the following settings
+When exporting MP4 from Insta360 Studio, suggested settings are:
 
-Pan 0 
-Roll 0 
-Pitch 0
-FOV 140
-Distortion control 0.6
-
-
+    Pan: 0
+    Roll: 0
+    Pitch: 0
+    FOV: 140
+    Distortion control: 0.6
 
 For web playback, the MP4 should support efficient seeking. With FFmpeg, use:
 
@@ -272,7 +281,7 @@ It assumes:
 
 Example command:
 
-    python data-processing/sample-data/prepare_web_dataset.py \
+    python data-processing/prepare_web_dataset.py \
       --csv /path/to/insv-frame-data.csv \
       --mp4-dir /path/to/mp4-files \
       --output-dir /path/to/web-dataset \
@@ -281,7 +290,7 @@ Example command:
 
 Example with S3 or CloudFront video prefix:
 
-    python data-processing/sample-data/prepare_web_dataset.py \
+    python data-processing/prepare_web_dataset.py \
       --csv /path/to/insv-frame-data.csv \
       --mp4-dir /path/to/mp4-files \
       --output-dir /path/to/web-dataset \
@@ -304,7 +313,19 @@ The JSON preparation step produces:
       data/
         wind-samples.json
 
-The corresponding MP4 files should be uploaded separately, usually to a `video/` prefix:
+The corresponding MP4 files should be available under the video prefix referenced by the manifest.
+
+For local development, a typical dataset directory looks like:
+
+    /path/to/web-dataset/
+      manifest.json
+      data/
+        wind-samples.json
+      video/
+        VID_20260707_060320_00_001.mp4
+        VID_20260707_061320_00_001.mp4
+
+For S3 or CloudFront deployment, a typical layout is:
 
     races/pacific-cup-2026/
       manifest.json
@@ -313,6 +334,94 @@ The corresponding MP4 files should be uploaded separately, usually to a `video/`
       video/
         VID_20260707_060320_00_001.mp4
         VID_20260707_061320_00_001.mp4
+
+---
+
+## Running the web app locally
+
+Install web dependencies:
+
+    cd web
+    npm install
+
+Start the Vite development server:
+
+    npm run dev
+
+The app usually runs at:
+
+    http://localhost:5173/
+
+By default, the app tries to load:
+
+    /manifest.json
+
+For a prepared dataset, pass the manifest URL using the `manifest` query parameter:
+
+    http://localhost:5173/?manifest=http://localhost:8000/manifest.json
+
+---
+
+## Serving a local dataset
+
+If the dataset is local, do not load `manifest.json` directly from the filesystem.
+
+Instead, serve the dataset directory over HTTP.
+
+Because the web app runs on port `5173` and the dataset server usually runs on port `8000`, the dataset server must send CORS headers.
+
+Use the CORS-enabled local server:
+
+    cd /path/to/web-dataset
+    python /path/to/wind-n-cloud/data-processing/cors_enabled_http_server.py
+
+For example:
+
+    cd "/Volumes/Elements/SailinVideos6/2026-PAC-CUP/00-WEB-APP"
+    python /path/to/wind-n-cloud/data-processing/cors_enabled_http_server.py
+
+This serves the dataset at:
+
+    http://localhost:8000/
+
+Then open:
+
+    http://localhost:5173/?manifest=http://localhost:8000/manifest.json
+
+Useful sanity checks:
+
+    http://localhost:8000/manifest.json
+    http://localhost:8000/data/wind-samples.json
+
+Both should load in the browser before opening the app.
+
+---
+
+## Why the CORS-enabled server is needed
+
+Opening this directly may work:
+
+    http://localhost:8000/manifest.json
+
+But the web app runs from:
+
+    http://localhost:5173
+
+The browser treats these as different origins because the ports are different.
+
+So this request:
+
+    http://localhost:5173 -> http://localhost:8000/manifest.json
+
+requires CORS headers.
+
+The plain Python server:
+
+    python -m http.server 8000
+
+does not send those headers by default.
+
+The project-provided `cors_enabled_http_server.py` does.
 
 ---
 
@@ -449,7 +558,7 @@ The web application loads the manifest URL, then resolves the wind data and vide
 
 ---
 
-## CORS requirements
+## CORS requirements for S3 or CloudFront
 
 If the web app is served from a different domain than the S3 or CloudFront assets, CORS must allow browser access.
 
@@ -478,43 +587,40 @@ For production, restrict `AllowedOrigins` to the actual web app domain.
 
 ## Web application architecture
 
-The planned web application should be implemented as:
+The web application is implemented as:
 
     Vite + React + TypeScript
 
-Recommended rendering approach:
+Current rendering approach:
 
 - HTML5 `<video>` for playback.
 - React state for current race time and playback status.
-- SVG or Canvas for the custom B&G-style wind plot.
+- SVG for the B&G-style wind plot.
 - D3 scales/shapes for plotting utilities.
 - Future canvas overlay on top of video for wind arrows.
 
-Suggested structure:
+Current structure:
 
     web/
       src/
         App.tsx
+        main.tsx
 
         components/
           RaceVideoPanel.tsx
           WindHistoryPanel.tsx
           TimelineControls.tsx
-          LoadingState.tsx
-          ErrorState.tsx
 
         data/
-          loadRaceManifest.ts
-          loadWindSamples.ts
-          resolveDatasetUrls.ts
+          loadRaceDataset.ts
+          url.ts
+          windSamples.ts
 
         playback/
           findSegmentForTime.ts
-          useRacePlayback.ts
-          timeMapping.ts
 
-        overlay/
-          WindOverlayCanvas.tsx
+        styles/
+          app.css
 
         types/
           race.ts
@@ -537,7 +643,7 @@ When video playback advances:
       -> timeline controls update
       -> future overlay updates
 
-When the user scrubs the timeline or clicks a time in the wind plot:
+When the user scrubs the timeline:
 
     selectedRaceTimeMs
       -> find internal video segment containing that time
@@ -636,7 +742,7 @@ No Python package manager other than the project virtual environment is required
 
 ## Current status
 
-Implemented or planned data-processing pieces:
+Implemented data-processing pieces:
 
 - `extract_insv_frame_csv.py`
   - recursively scans `.insv` files;
@@ -650,10 +756,20 @@ Implemented or planned data-processing pieces:
   - writes `manifest.json`;
   - writes `data/wind-samples.json`.
 
-Planned web app pieces:
+- `cors_enabled_http_server.py`
+  - serves local web datasets with CORS headers for development.
+
+Implemented web app pieces:
 
 - continuous time-based video playback;
 - B&G-style vertical wind history plot;
 - timeline scrubber;
-- S3 or CloudFront dataset loading;
-- wind overlay on top of video.
+- manifest-based dataset loading;
+- local and remote dataset support.
+
+Planned pieces:
+
+- S3 or CloudFront production dataset hosting;
+- wind overlay on top of video;
+- richer wind shift analysis tools.
+- 

@@ -1,0 +1,286 @@
+:root {
+  color: #e5eef7;
+  background: #06101d;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 1024px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, rgba(52, 119, 186, 0.3), transparent 34rem),
+    #06101d;
+}
+
+button,
+select {
+  font: inherit;
+}
+
+button {
+  border: 1px solid #39526f;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.8rem;
+  color: #e5eef7;
+  background: #122238;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #193451;
+}
+
+.primary-button {
+  min-width: 5rem;
+  border-color: #6fb6ff;
+  background: #0f5ea8;
+}
+
+.primary-button:hover {
+  background: #1470c7;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid rgba(111, 182, 255, 0.22);
+  border-radius: 1rem;
+  background: rgba(7, 19, 34, 0.86);
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.28);
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.app-header p {
+  margin: 0.25rem 0 0;
+  color: #8aa3bd;
+}
+
+.live-readout {
+  display: flex;
+  gap: 1rem;
+}
+
+.live-readout > div {
+  min-width: 5.5rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(111, 182, 255, 0.2);
+  border-radius: 0.75rem;
+  background: rgba(11, 29, 50, 0.9);
+}
+
+.readout-label {
+  display: block;
+  color: #8aa3bd;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.readout-value {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.main-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 460px;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.panel {
+  border: 1px solid rgba(111, 182, 255, 0.22);
+  border-radius: 1rem;
+  background: rgba(7, 19, 34, 0.86);
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  border-bottom: 1px solid rgba(111, 182, 255, 0.14);
+}
+
+.panel-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.panel-subtitle {
+  margin-top: 0.2rem;
+  color: #8aa3bd;
+  font-size: 0.85rem;
+}
+
+.video-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.race-video {
+  width: 100%;
+  height: min(70vh, 720px);
+  background: #000;
+  object-fit: contain;
+}
+
+.empty-state,
+.loading-state,
+.error-state {
+  display: grid;
+  place-items: center;
+  min-height: 18rem;
+  padding: 2rem;
+  color: #8aa3bd;
+}
+
+.wind-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.wind-history-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.grid-line {
+  stroke: rgba(137, 171, 205, 0.18);
+  stroke-width: 1;
+}
+
+.vertical-grid-line {
+  stroke: rgba(137, 171, 205, 0.12);
+  stroke-width: 1;
+}
+
+.plot-border {
+  fill: none;
+  stroke: rgba(137, 171, 205, 0.32);
+  stroke-width: 1;
+}
+
+.twd-line {
+  fill: none;
+  stroke: #ffcc66;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.tws-line {
+  fill: none;
+  stroke: #61d394;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.age-label,
+.x-label,
+.axis-caption,
+.plot-title {
+  fill: #9fb4ca;
+  font-size: 0.72rem;
+}
+
+.plot-title {
+  fill: #e5eef7;
+  font-weight: 700;
+}
+
+.wind-stats {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 1rem 1rem;
+  color: #8aa3bd;
+  font-size: 0.82rem;
+}
+
+.timeline-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid rgba(111, 182, 255, 0.22);
+  border-radius: 1rem;
+  background: rgba(7, 19, 34, 0.9);
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.28);
+}
+
+.timeline-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.history-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  color: #8aa3bd;
+}
+
+.history-selector select {
+  border: 1px solid #39526f;
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  color: #e5eef7;
+  background: #122238;
+}
+
+.current-time-display {
+  min-width: 15rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #e5eef7;
+}
+
+.race-time-slider {
+  width: 100%;
+}
+
+.loading-state,
+.error-state {
+  margin: auto;
+  width: min(42rem, 100%);
+  border: 1px solid rgba(111, 182, 255, 0.22);
+  border-radius: 1rem;
+  background: rgba(7, 19, 34, 0.86);
+}
+
+.error-state {
+  color: #ffb3b3;
+}
