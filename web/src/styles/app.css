@@ -140,6 +140,29 @@ button:hover {
   font-size: 0.85rem;
 }
 
+.pan-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pan-button {
+  padding: 0.4rem 0.6rem;
+  font-size: 1.1rem;
+  font-weight: bold;
+  min-width: auto;
+  width: 2rem;
+  height: 2rem;
+}
+
+.pan-indicator {
+  min-width: 3rem;
+  text-align: center;
+  color: #8aa3bd;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
 .video-panel {
   display: flex;
   flex-direction: column;
@@ -283,4 +306,50 @@ button:hover {
 
 .error-state {
   color: #ffb3b3;
+}
+.twd-line-port {
+  fill: none;
+  stroke: #ff3b30;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.twd-line-starboard {
+  fill: none;
+  stroke: #35d05f;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.tws-line {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.timeline-scale {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  color: #8aa3bd;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-scale-start {
+  justify-self: start;
+}
+
+.timeline-scale-current {
+  justify-self: center;
+  color: #e5eef7;
+  font-weight: 700;
+}
+
+.timeline-scale-end {
+  justify-self: end;
 }

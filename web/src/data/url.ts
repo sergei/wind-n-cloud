@@ -1,5 +1,21 @@
-export function resolveRelativeUrl(baseUrl: string, maybeRelativeUrl: string): string {
-  return new URL(maybeRelativeUrl, baseUrl).toString();
+const DEFAULT_MANIFEST_URL = "/manifest.json";
+
+function getEnvString(name: string): string | undefined {
+  const value = import.meta.env[name as keyof ImportMetaEnv];
+
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+}
+
+function toAbsoluteBaseUrl(baseUrl: string | undefined): string {
+  if (!baseUrl) {
+    return window.location.href;
+  }
+
+  return new URL(baseUrl, window.location.href).toString();
+}
+
+export function resolveRelativeUrl(baseUrl: string | undefined, maybeRelativeUrl: string): string {
+  return new URL(maybeRelativeUrl, toAbsoluteBaseUrl(baseUrl)).toString();
 }
 
 export function getManifestUrl(): string {
@@ -10,11 +26,13 @@ export function getManifestUrl(): string {
     return fromQuery;
   }
 
-  const fromEnv = import.meta.env.VITE_DEFAULT_MANIFEST_URL as string | undefined;
+  return getEnvString("VITE_DEFAULT_MANIFEST_URL") ?? DEFAULT_MANIFEST_URL;
+}
 
-  if (fromEnv) {
-    return fromEnv;
-  }
+export function getMediaBaseUrl(): string | undefined {
+  return getEnvString("VITE_MEDIA_BASE_URL");
+}
 
-  return "/manifest.json";
+export function getDataBaseUrl(): string | undefined {
+  return getEnvString("VITE_DATA_BASE_URL");
 }

@@ -1,0 +1,6 @@
+--csv=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/20-DATA/clouds.csv
+--mp4-dir=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/00-WEB-APP/video
+--output-dir=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/00-WEB-APP
+--upload-to-s3
+--aws-profile=sailvue
+--s3-bucket=wind-n-cloud-media-992382765816-us-east-1

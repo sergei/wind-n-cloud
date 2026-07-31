@@ -4,6 +4,11 @@ export type VideoSegment = {
   endTime: string;
   startTimeMs: number;
   endTimeMs: number;
+  frameCount?: number;
+  frameIntervalSeconds?: number;
+  raceDurationSeconds?: number;
+  videoDurationSeconds?: number;
+  raceSecondsPerVideoSecond?: number;
   videoUrl: string;
 };
 
@@ -49,4 +54,5 @@ export type WindSampleAtTime = {
   twd: number | null;
   tws: number | null;
   heading: number | null;
+  twa: number | null;
 };

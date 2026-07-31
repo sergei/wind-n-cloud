@@ -41,5 +41,6 @@ function sampleAt(samples: WindSamplesColumnar, index: number): WindSampleAtTime
     twd: samples.twd[index] ?? null,
     tws: samples.tws[index] ?? null,
     heading: samples.heading?.[index] ?? null,
+    twa: samples.twa?.[index] ?? null,
   };
 }

@@ -1,0 +1,6 @@
+--csv=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/20-DATA/2026-pac-cup-2.csv
+--output=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/20-DATA/clouds.csv
+/Volumes/Elements/SailinVideos6/2026-PAC-CUP/10-FOOTAGE/10-INSTA360/20-TIMELAPSE
+--input-timezone=America/Los_Angeles
+--time-adjust-csv=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/20-DATA/time-adustment.csv
+--tolerance=1.1

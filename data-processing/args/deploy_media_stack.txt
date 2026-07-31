@@ -1,0 +1,8 @@
+--profile=sailvue
+--region=us-east-1
+--stack-name=wind-n-cloud-media
+--github-pages-domain=sergei.github.io
+--allowed-local-origin=http://localhost:5173
+--github-org=sergei
+--github-repo=wind-n-cloud
+--github-branch=master

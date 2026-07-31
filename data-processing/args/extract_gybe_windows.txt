@@ -1,0 +1,3 @@
+--csv=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/20-DATA/clouds.csv
+--output=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/20-DATA/gybes.csv
+--min-tack-duration=600

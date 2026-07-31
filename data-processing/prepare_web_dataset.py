@@ -3,10 +3,13 @@
 import argparse
 import csv
 import json
+import os
 import re
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 
 CSV_TIME_FORMATS = [
@@ -97,8 +100,21 @@ def mp4_name_for_clip(clip_name: str) -> str:
     return f"{clip_path.stem}.mp4"
 
 
-def public_url_join(prefix: str, filename: str) -> str:
+def public_url_join(prefix: str | None, filename: str) -> str:
+    if not prefix:
+        return filename
+
     return f"{prefix.rstrip('/')}/{filename}"
+
+
+def derive_s3_prefix(asset_base_url: str | None, explicit_prefix: str | None) -> str:
+    if explicit_prefix:
+        return explicit_prefix.strip("/")
+
+    if not asset_base_url:
+        return ""
+
+    return urlparse(asset_base_url).path.strip("/")
 
 
 def read_frame_csv(csv_path: Path) -> list[dict[str, Any]]:
@@ -112,7 +128,7 @@ def read_frame_csv(csv_path: Path) -> list[dict[str, Any]]:
         if not reader.fieldnames:
             raise ValueError(f"CSV file has no header: {csv_path}")
 
-        required_columns = ["Time", "TWD", "TWS", "clip_name", "time_into_clip"]
+        required_columns = ["Time", "TWD(med)", "TWS(med)", "clip_name", "clip_timecode"]
         missing_columns = [
             column for column in required_columns if column not in reader.fieldnames
         ]
@@ -127,18 +143,18 @@ def read_frame_csv(csv_path: Path) -> list[dict[str, Any]]:
         for row_number, row in enumerate(reader, start=2):
             raw_time = row.get("Time")
             clip_name = row.get("clip_name")
-            time_into_clip = row.get("time_into_clip")
+            clip_timecode = row.get("clip_timecode")
 
-            if not raw_time or not clip_name or not time_into_clip:
+            if not raw_time or not clip_name or clip_timecode is None or clip_timecode == "":
                 print(f"Warning: skipping incomplete row {row_number}")
                 continue
 
             sample_time = parse_time(raw_time)
-            time_into_clip_seconds = parse_time_into_clip_seconds(time_into_clip)
+            time_into_clip_seconds = parse_optional_float(clip_timecode)
 
             if time_into_clip_seconds is None:
                 print(
-                    f"Warning: could not parse time_into_clip={time_into_clip!r} "
+                    f"Warning: could not parse clip_timecode={clip_timecode!r} "
                     f"on row {row_number}; skipping"
                 )
                 continue
@@ -149,16 +165,16 @@ def read_frame_csv(csv_path: Path) -> list[dict[str, Any]]:
                     "timeMs": to_time_ms(sample_time),
                     "clipName": clip_name,
                     "mp4Name": mp4_name_for_clip(clip_name),
-                    "timeIntoClip": time_into_clip,
+                    "timeIntoClip": clip_timecode,
                     "timeIntoClipSeconds": time_into_clip_seconds,
-                    "twd": parse_optional_float(row.get("TWD")),
-                    "tws": parse_optional_float(row.get("TWS")),
+                    "twd": parse_optional_float(row.get("TWD(med)")),
+                    "tws": parse_optional_float(row.get("TWS(med)")),
                     "heading": parse_optional_float(row.get("Heading")),
                     "sog": parse_optional_float(row.get("SOG")),
                     "cog": parse_optional_float(row.get("COG")),
                     "awa": parse_optional_float(row.get("AWA")),
                     "aws": parse_optional_float(row.get("AWS")),
-                    "twa": parse_optional_float(row.get("TWA")),
+                    "twa": parse_optional_float(row.get("TWA(med)")),
                 }
             )
 
@@ -184,6 +200,81 @@ def find_mp4_file(mp4_dir: Path, mp4_name: str) -> Path | None:
         return None
 
     return sorted(matches)[0]
+
+
+def run_ffprobe(path: Path) -> dict[str, Any] | None:
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError:
+        print("Warning: ffprobe not found; MP4 duration cannot be detected")
+        return None
+    except subprocess.CalledProcessError:
+        return None
+
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def get_mp4_duration_seconds(path: Path) -> float | None:
+    data = run_ffprobe(path)
+    if not data:
+        return None
+
+    duration = data.get("format", {}).get("duration")
+    if duration:
+        try:
+            return float(duration)
+        except ValueError:
+            pass
+
+    for stream in data.get("streams", []):
+        duration = stream.get("duration")
+        if duration:
+            try:
+                return float(duration)
+            except ValueError:
+                pass
+
+    return None
+
+
+def infer_frame_interval_seconds(clip_rows: list[dict[str, Any]]) -> float:
+    if len(clip_rows) < 2:
+        return 0.0
+
+    intervals: list[float] = []
+
+    for previous, current in zip(clip_rows, clip_rows[1:]):
+        interval = current["timeIntoClipSeconds"] - previous["timeIntoClipSeconds"]
+        if interval > 0:
+            intervals.append(interval)
+
+    if not intervals:
+        return 0.0
+
+    intervals.sort()
+    middle = len(intervals) // 2
+
+    if len(intervals) % 2 == 1:
+        return intervals[middle]
+
+    return (intervals[middle - 1] + intervals[middle]) / 2
 
 
 def build_video_segments(
@@ -225,21 +316,42 @@ def build_video_segments(
             print(f"Warning: {message}; skipping segment")
             continue
 
+        video_duration_seconds = get_mp4_duration_seconds(mp4_path)
+
+        if video_duration_seconds is None:
+            message = f"Could not determine MP4 duration for {mp4_path}"
+
+            if fail_on_missing_video:
+                raise ValueError(message)
+
+            print(f"Warning: {message}; skipping segment")
+            continue
+
         start_time_ms = first_row["timeMs"] - int(
             first_row["timeIntoClipSeconds"] * 1000
         )
 
-        last_sample_time_ms = last_row["timeMs"]
-        last_offset_ms = int(last_row["timeIntoClipSeconds"] * 1000)
+        frame_interval_seconds = infer_frame_interval_seconds(clip_rows)
 
-        # Estimate segment end using available frame-matched data.
-        # This is sufficient for timeline mapping because each row corresponds to a frame.
-        estimated_duration_ms = last_offset_ms + max(
-            0,
-            last_sample_time_ms - (start_time_ms + last_offset_ms),
+        # This is the real-world duration represented by the time-lapse frames.
+        # Calculate from actual timestamps (timeMs), not clip positions.
+        # The last row is the timestamp of the last frame. Add one frame interval
+        # so the segment covers the visual duration of that final frame too.
+        race_duration_seconds = (last_row["timeMs"] - first_row["timeMs"]) / 1000 + frame_interval_seconds
+
+        if race_duration_seconds <= 0:
+            race_duration_seconds = max(
+                0.0,
+                (last_row["timeMs"] - start_time_ms) / 1000,
+            )
+
+        end_time_ms = start_time_ms + int(race_duration_seconds * 1000)
+
+        race_seconds_per_video_second = (
+            race_duration_seconds / video_duration_seconds
+            if video_duration_seconds > 0
+            else 1.0
         )
-
-        end_time_ms = max(last_sample_time_ms, start_time_ms + estimated_duration_ms)
 
         start_time = datetime.fromtimestamp(
             start_time_ms / 1000,
@@ -253,6 +365,15 @@ def build_video_segments(
 
         segment_id = f"segment-{index:06d}"
 
+        print(
+            f"  {segment_id}: {mp4_name}, "
+            f"frames {len(clip_rows)}, "
+            f"frame interval {frame_interval_seconds:.3f}s, "
+            f"race duration {race_duration_seconds:.3f}s, "
+            f"video duration {video_duration_seconds:.3f}s, "
+            f"scale {race_seconds_per_video_second:.6f} race-sec/video-sec"
+        )
+
         segments.append(
             {
                 "id": segment_id,
@@ -260,6 +381,14 @@ def build_video_segments(
                 "endTime": format_iso_utc(end_time),
                 "startTimeMs": start_time_ms,
                 "endTimeMs": end_time_ms,
+                "frameCount": len(clip_rows),
+                "frameIntervalSeconds": round(frame_interval_seconds, 6),
+                "raceDurationSeconds": round(race_duration_seconds, 6),
+                "videoDurationSeconds": round(video_duration_seconds, 6),
+                "raceSecondsPerVideoSecond": round(
+                    race_seconds_per_video_second,
+                    9,
+                ),
                 "videoUrl": public_url_join(public_video_prefix, mp4_name),
             }
         )
@@ -334,7 +463,7 @@ def build_manifest(
     ).replace(tzinfo=None)
 
     return {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "raceId": race_id,
         "displayName": display_name,
         "timezone": "UTC",
@@ -376,8 +505,64 @@ def write_json(path: Path, data: Any) -> None:
     print(f"Wrote {path}")
 
 
+def upload_json_outputs(
+    output_dir: Path,
+    bucket_name: str,
+    aws_profile: str | None,
+    aws_region: str,
+    s3_prefix: str,
+    cloudfront_distribution_id: str | None,
+    invalidate_cloudfront: bool,
+) -> None:
+    try:
+        import boto3
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("boto3 is required when --upload-to-s3 is used") from exc
+
+    session_kwargs: dict[str, str] = {"region_name": aws_region}
+    if aws_profile:
+        session_kwargs["profile_name"] = aws_profile
+
+    session = boto3.Session(**session_kwargs)
+    s3_client = session.client("s3")
+
+    uploaded_keys: list[str] = []
+
+    for file_path in sorted(output_dir.rglob("*.json")):
+        relative_key = file_path.relative_to(output_dir).as_posix()
+        key = public_url_join(s3_prefix or None, relative_key)
+        cache_control = "no-cache,no-store,must-revalidate"
+        if relative_key != "manifest.json":
+            cache_control = "max-age=60"
+
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=key,
+            Body=file_path.read_bytes(),
+            ContentType="application/json",
+            CacheControl=cache_control,
+        )
+        uploaded_keys.append(key)
+        print(f"Uploaded s3://{bucket_name}/{key}")
+
+    if invalidate_cloudfront and cloudfront_distribution_id:
+        s3_client_cf = session.client("cloudfront")
+        paths = [f"/{key}" for key in uploaded_keys]
+        s3_client_cf.create_invalidation(
+            DistributionId=cloudfront_distribution_id,
+            InvalidationBatch={
+                "Paths": {"Quantity": len(paths), "Items": paths},
+                "CallerReference": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        print(f"Invalidated CloudFront distribution {cloudfront_distribution_id}")
+    elif invalidate_cloudfront:
+        raise ValueError("--cloudfront-distribution-id is required when --invalidate-cloudfront is set")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
+        fromfile_prefix_chars="@",
         description=(
             "Prepare JSON files for the wind-n-cloud web app from the CSV produced "
             "by extract_insv_frame_csv.py."
@@ -423,20 +608,75 @@ def main() -> None:
 
     parser.add_argument(
         "--wind-samples-url",
-        default="data/wind-samples.json",
+        default=None,
         help=(
             "URL written into manifest for wind samples. "
-            "Can be relative to manifest. Default: data/wind-samples.json"
+            "Can be relative to manifest or absolute. "
+            "If omitted, it defaults to data/wind-samples.json or "
+            "<asset-base-url>/data/wind-samples.json when --asset-base-url is set."
         ),
     )
 
     parser.add_argument(
         "--public-video-prefix",
-        default="video",
+        default=None,
         help=(
             "URL prefix written into manifest for MP4 video files. "
-            "Use an S3/CloudFront prefix later if desired. Default: video"
+            "If omitted, it defaults to video or <asset-base-url>/video when "
+            "--asset-base-url is set."
         ),
+    )
+
+    parser.add_argument(
+        "--asset-base-url",
+        default=None,
+        help=(
+            "Optional base URL for both data and video assets. "
+            "When set, default manifest URLs become <asset-base-url>/data/wind-samples.json "
+            "and <asset-base-url>/video."
+        ),
+    )
+
+    parser.add_argument(
+        "--upload-to-s3",
+        action="store_true",
+        help="Upload generated JSON files to S3 after writing them locally.",
+    )
+
+    parser.add_argument(
+        "--aws-profile",
+        default=None,
+        help="AWS profile to use for S3 upload when --upload-to-s3 is enabled.",
+    )
+
+    parser.add_argument(
+        "--aws-region",
+        default=os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or "us-west-2",
+        help="AWS region to use for S3 upload. Default: env AWS_REGION/AWS_DEFAULT_REGION or us-west-2",
+    )
+
+    parser.add_argument(
+        "--s3-bucket",
+        default=None,
+        help="S3 bucket name used when --upload-to-s3 is enabled.",
+    )
+
+    parser.add_argument(
+        "--s3-prefix",
+        default=None,
+        help="Optional S3 prefix for uploaded JSON files.",
+    )
+
+    parser.add_argument(
+        "--cloudfront-distribution-id",
+        default=None,
+        help="CloudFront distribution ID to invalidate after upload.",
+    )
+
+    parser.add_argument(
+        "--invalidate-cloudfront",
+        action="store_true",
+        help="Invalidate CloudFront after uploading JSON files.",
     )
 
     parser.add_argument(
@@ -457,6 +697,22 @@ def main() -> None:
     csv_path = args.csv_path.expanduser().resolve()
     mp4_dir = args.mp4_dir.expanduser().resolve()
     output_dir = args.output_dir.expanduser().resolve()
+    asset_base_url = args.asset_base_url.rstrip("/") if args.asset_base_url else None
+    s3_prefix = derive_s3_prefix(asset_base_url, args.s3_prefix)
+    wind_samples_url = (
+        args.wind_samples_url
+        if args.wind_samples_url
+        else public_url_join(asset_base_url, "data/wind-samples.json")
+        if asset_base_url
+        else "data/wind-samples.json"
+    )
+    public_video_prefix = (
+        args.public_video_prefix
+        if args.public_video_prefix
+        else public_url_join(asset_base_url, "video")
+        if asset_base_url
+        else "video"
+    )
 
     if not csv_path.is_file():
         raise ValueError(f"CSV file does not exist: {csv_path}")
@@ -469,7 +725,7 @@ def main() -> None:
     segments = build_video_segments(
         rows=rows,
         mp4_dir=mp4_dir,
-        public_video_prefix=args.public_video_prefix,
+        public_video_prefix=public_video_prefix,
         fail_on_missing_video=not args.allow_missing_video,
     )
 
@@ -483,12 +739,26 @@ def main() -> None:
         display_name=args.display_name,
         rows=rows,
         segments=segments,
-        wind_samples_url=args.wind_samples_url,
+        wind_samples_url=wind_samples_url,
         default_history_minutes=args.default_history_minutes,
     )
 
     write_json(output_dir / "data" / "wind-samples.json", wind_samples)
     write_json(output_dir / "manifest.json", manifest)
+
+    if args.upload_to_s3:
+        if not args.s3_bucket:
+            raise ValueError("--s3-bucket is required when --upload-to-s3 is set")
+
+        upload_json_outputs(
+            output_dir=output_dir,
+            bucket_name=args.s3_bucket,
+            aws_profile=args.aws_profile,
+            aws_region=args.aws_region,
+            s3_prefix=s3_prefix,
+            cloudfront_distribution_id=args.cloudfront_distribution_id,
+            invalidate_cloudfront=args.invalidate_cloudfront,
+        )
 
     print("Done")
 

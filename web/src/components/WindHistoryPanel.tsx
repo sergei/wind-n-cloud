@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { extent, max } from "d3-array";
+import { extent } from "d3-array";
 import { scaleLinear } from "d3-scale";
 import { line } from "d3-shape";
 import type { WindSamplesColumnar } from "../types/race";
@@ -10,9 +10,25 @@ type WindHistoryPanelProps = {
   historyDurationMinutes: number;
 };
 
+type Tack = "port" | "starboard";
+
 type PlotPoint = {
   ageMinutes: number;
   value: number;
+  twa?: number | null;
+};
+
+type ColoredPathSegment = {
+  key: string;
+  tack: Tack;
+  points: PlotPoint[];
+};
+
+type PaddedDomainOptions = {
+  minimumSpan: number;
+  paddingRatio: number;
+  lowerBound?: number;
+  upperBound?: number;
 };
 
 const WIDTH = 420;
@@ -50,11 +66,13 @@ export function WindHistoryPanel({
       const ageMinutes = (currentRaceTimeMs - sampleTimeMs) / 60_000;
       const twdValue = samples.twd[index];
       const twsValue = samples.tws[index];
+      const twaValue = samples.twa?.[index] ?? null;
 
       if (twdValue !== null && twdValue !== undefined) {
         twd.push({
           ageMinutes,
           value: twdValue,
+          twa: twaValue,
         });
       }
 
@@ -76,20 +94,31 @@ export function WindHistoryPanel({
     .domain([0, historyDurationMinutes])
     .range([0, INNER_HEIGHT]);
 
-  const twdScale = scaleLinear().domain([0, 360]).range([0, SUBPLOT_WIDTH]);
+  const currentTwdExtent = extent(twdPoints, (point) => point.value);
+  const currentTwsExtent = extent(twsPoints, (point) => point.value);
 
-  const twsMax = Math.max(10, Math.ceil((max(twsPoints, (point) => point.value) ?? 10) / 5) * 5);
-  const twsScale = scaleLinear().domain([0, twsMax]).range([0, SUBPLOT_WIDTH]);
+  const twdDomain = buildPaddedDomain(currentTwdExtent[0], currentTwdExtent[1], {
+    minimumSpan: 10,
+    paddingRatio: 0.12,
+    lowerBound: 0,
+    upperBound: 360,
+  });
 
-  const twdPath = buildPath(twdPoints, twdScale, yScale);
+  const twsDomain = buildPaddedDomain(currentTwsExtent[0], currentTwsExtent[1], {
+    minimumSpan: 1,
+    paddingRatio: 0.15,
+    lowerBound: 0,
+  });
+
+  const twdScale = scaleLinear().domain(twdDomain).range([0, SUBPLOT_WIDTH]);
+  const twsScale = scaleLinear().domain(twsDomain).range([0, SUBPLOT_WIDTH]);
+
+  const twdPathSegments = buildColoredTwdSegments(twdPoints);
   const twsPath = buildPath(twsPoints, twsScale, yScale);
 
   const ageTicks = buildAgeTicks(historyDurationMinutes);
-  const twdTicks = [0, 90, 180, 270, 360];
-  const twsTicks = buildSpeedTicks(twsMax);
-
-  const currentTwdExtent = extent(twdPoints, (point) => point.value);
-  const currentTwsExtent = extent(twsPoints, (point) => point.value);
+  const twdTicks = buildValueTicks(twdDomain);
+  const twsTicks = buildValueTicks(twsDomain);
 
   return (
     <section className="panel wind-panel">
@@ -131,12 +160,23 @@ export function WindHistoryPanel({
               <g key={tick} transform={`translate(${twdScale(tick)}, 0)`}>
                 <line className="vertical-grid-line" x1={0} x2={0} y1={0} y2={INNER_HEIGHT} />
                 <text className="x-label" x={0} y={INNER_HEIGHT + 20} textAnchor="middle">
-                  {tick}
+                  {formatTick(tick)}
                 </text>
               </g>
             ))}
 
-            <path className="twd-line" d={twdPath} />
+            {twdPathSegments.map((segment) => (
+              <path
+                key={segment.key}
+                className={
+                  segment.tack === "port"
+                    ? "twd-line-port"
+                    : "twd-line-starboard"
+                }
+                d={buildPath(segment.points, twdScale, yScale)}
+              />
+            ))}
+
             <rect className="plot-border" width={SUBPLOT_WIDTH} height={INNER_HEIGHT} />
           </g>
 
@@ -149,7 +189,7 @@ export function WindHistoryPanel({
               <g key={tick} transform={`translate(${twsScale(tick)}, 0)`}>
                 <line className="vertical-grid-line" x1={0} x2={0} y1={0} y2={INNER_HEIGHT} />
                 <text className="x-label" x={0} y={INNER_HEIGHT + 20} textAnchor="middle">
-                  {tick}
+                  {formatTick(tick)}
                 </text>
               </g>
             ))}
@@ -170,6 +210,37 @@ export function WindHistoryPanel({
       </div>
     </section>
   );
+}
+
+function buildColoredTwdSegments(points: PlotPoint[]): ColoredPathSegment[] {
+  const segments: ColoredPathSegment[] = [];
+  let currentSegment: ColoredPathSegment | null = null;
+
+  for (const point of points) {
+    const tack = getTackFromTwa(point.twa);
+
+    if (!currentSegment || currentSegment.tack !== tack) {
+      currentSegment = {
+        key: `twd-${segments.length}-${tack}`,
+        tack,
+        points: [],
+      };
+
+      segments.push(currentSegment);
+    }
+
+    currentSegment.points.push(point);
+  }
+
+  return segments.filter((segment) => segment.points.length >= 2);
+}
+
+function getTackFromTwa(twa: number | null | undefined): Tack {
+  if (twa === null || twa === undefined) {
+    return "starboard";
+  }
+
+  return twa > 180 ? "port" : "starboard";
 }
 
 function buildPath(
@@ -200,18 +271,73 @@ function buildAgeTicks(durationMinutes: number): number[] {
   return [0, 30, 60, 90, 120].filter((tick) => tick <= durationMinutes);
 }
 
-function buildSpeedTicks(maxSpeed: number): number[] {
-  const step = maxSpeed <= 10 ? 2 : 5;
-  const ticks: number[] = [];
-
-  for (let value = 0; value <= maxSpeed; value += step) {
-    ticks.push(value);
+function buildPaddedDomain(
+  minValue: number | undefined,
+  maxValue: number | undefined,
+  options: PaddedDomainOptions,
+): [number, number] {
+  if (minValue === undefined || maxValue === undefined) {
+    return [options.lowerBound ?? 0, options.upperBound ?? options.minimumSpan];
   }
 
-  return ticks;
+  const center = (minValue + maxValue) / 2;
+  const rawSpan = Math.max(maxValue - minValue, options.minimumSpan);
+  const paddedSpan = rawSpan * (1 + options.paddingRatio * 2);
+
+  let lower = center - paddedSpan / 2;
+  let upper = center + paddedSpan / 2;
+
+  if (options.lowerBound !== undefined && lower < options.lowerBound) {
+    const shift = options.lowerBound - lower;
+    lower += shift;
+    upper += shift;
+  }
+
+  if (options.upperBound !== undefined && upper > options.upperBound) {
+    const shift = upper - options.upperBound;
+    lower -= shift;
+    upper -= shift;
+  }
+
+  if (options.lowerBound !== undefined) {
+    lower = Math.max(options.lowerBound, lower);
+  }
+
+  if (options.upperBound !== undefined) {
+    upper = Math.min(options.upperBound, upper);
+  }
+
+  if (lower === upper) {
+    upper = lower + options.minimumSpan;
+  }
+
+  return [lower, upper];
 }
 
-function formatRange(minValue: number | undefined, maxValue: number | undefined, suffix: string): string {
+function buildValueTicks(domain: [number, number]): number[] {
+  const [minValue, maxValue] = domain;
+  const midValue = (minValue + maxValue) / 2;
+
+  return [minValue, midValue, maxValue];
+}
+
+function formatTick(value: number): string {
+  if (Math.abs(value) >= 100) {
+    return value.toFixed(0);
+  }
+
+  if (Math.abs(value) >= 10) {
+    return value.toFixed(1);
+  }
+
+  return value.toFixed(2);
+}
+
+function formatRange(
+  minValue: number | undefined,
+  maxValue: number | undefined,
+  suffix: string,
+): string {
   if (minValue === undefined || maxValue === undefined) {
     return "n/a";
   }

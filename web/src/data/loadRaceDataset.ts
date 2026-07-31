@@ -1,5 +1,5 @@
 import type { RaceManifest, WindSamplesColumnar } from "../types/race";
-import { resolveRelativeUrl } from "./url";
+import { getDataBaseUrl, resolveRelativeUrl } from "./url";
 
 export type LoadedRaceDataset = {
   manifestUrl: string;
@@ -19,7 +19,11 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 export async function loadRaceDataset(manifestUrl: string): Promise<LoadedRaceDataset> {
   const manifest = await fetchJson<RaceManifest>(manifestUrl);
-  const windSamplesUrl = resolveRelativeUrl(manifestUrl, manifest.data.windSamplesUrl);
+  const dataBaseUrl = getDataBaseUrl();
+  const windSamplesUrl = resolveRelativeUrl(
+    dataBaseUrl ?? manifestUrl,
+    manifest.data.windSamplesUrl,
+  );
   const windSamples = await fetchJson<WindSamplesColumnar>(windSamplesUrl);
 
   return {
