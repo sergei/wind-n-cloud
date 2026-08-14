@@ -64,6 +64,14 @@ Use these values for:
 - `VITE_DATA_BASE_URL`
 - optional automation or future CI integration
 
+Add this GitHub repository secret for the Pages build:
+- `CLOUDFRONT_DOMAIN`
+
+The Pages workflow uses it to set:
+- `VITE_DEFAULT_MANIFEST_URL=https://<domain>/manifest.json`
+- `VITE_MEDIA_BASE_URL=https://<domain>/media`
+- `VITE_DATA_BASE_URL=https://<domain>/data`
+
 ## 5) Video vs data uploads
 
 - **Videos**: upload manually to `s3://<BucketName>/media/...`

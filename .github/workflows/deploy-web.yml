@@ -39,7 +39,9 @@ jobs:
       - name: Build site
         working-directory: web
         env:
-          VITE_DEFAULT_MANIFEST_URL: ${{ secrets.VITE_DEFAULT_MANIFEST_URL }}
+          VITE_DEFAULT_MANIFEST_URL: https://${{ secrets.CLOUDFRONT_DOMAIN }}/manifest.json
+          VITE_MEDIA_BASE_URL: https://${{ secrets.CLOUDFRONT_DOMAIN }}/media
+          VITE_DATA_BASE_URL: https://${{ secrets.CLOUDFRONT_DOMAIN }}/data
         run: npm run build
 
       - name: Upload Pages artifact

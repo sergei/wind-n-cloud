@@ -112,6 +112,12 @@ The project now supports two operating modes:
 - upload videos manually to S3;
 - upload non-video data files by running `prepare_web_dataset.py --upload-to-s3`.
 
+The Pages build expects a repository secret named `CLOUDFRONT_DOMAIN` so it can set:
+
+- `VITE_DEFAULT_MANIFEST_URL=https://<domain>/manifest.json`
+- `VITE_MEDIA_BASE_URL=https://<domain>/media`
+- `VITE_DATA_BASE_URL=https://<domain>/data`
+
 The CloudFormation stack is deployed with the profile-based helper:
 
 ```bash
