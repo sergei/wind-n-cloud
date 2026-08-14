@@ -140,29 +140,6 @@ button:hover {
   font-size: 0.85rem;
 }
 
-.pan-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.pan-button {
-  padding: 0.4rem 0.6rem;
-  font-size: 1.1rem;
-  font-weight: bold;
-  min-width: auto;
-  width: 2rem;
-  height: 2rem;
-}
-
-.pan-indicator {
-  min-width: 3rem;
-  text-align: center;
-  color: #8aa3bd;
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-
 .video-panel {
   display: flex;
   flex-direction: column;

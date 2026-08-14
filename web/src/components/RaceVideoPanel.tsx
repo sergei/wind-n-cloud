@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { VideoSegment } from "../types/race";
 import { findNextSegment } from "../playback/findSegmentForTime";
 import { getMediaBaseUrl, resolveRelativeUrl } from "../data/url";
 
 const DEBUG_PLAYBACK = false;
-const PAN_ANGLES = [0, 120, 240] as const;
+const DEFAULT_PAN_ANGLE = 0;
 
 type RaceVideoPanelProps = {
   manifestUrl: string;
@@ -27,24 +27,11 @@ export function RaceVideoPanel({
   const animationFrameRef = useRef<number | null>(null);
   const suppressVideoTimeUpdatesRef = useRef(false);
   const lastLoggedVideoSecondRef = useRef<number | null>(null);
-  const [currentPanAngle, setCurrentPanAngle] = useState(0);
 
   const activeSegment = useMemo(
     () => findBestSegmentForTime(segments, currentRaceTimeMs),
     [segments, currentRaceTimeMs],
   );
-
-  const handlePanLeft = () => {
-    const currentIndex = PAN_ANGLES.indexOf(currentPanAngle as never);
-    const previousIndex = currentIndex === 0 ? PAN_ANGLES.length - 1 : currentIndex - 1;
-    setCurrentPanAngle(PAN_ANGLES[previousIndex]);
-  };
-
-  const handlePanRight = () => {
-    const currentIndex = PAN_ANGLES.indexOf(currentPanAngle as never);
-    const nextIndex = (currentIndex + 1) % PAN_ANGLES.length;
-    setCurrentPanAngle(PAN_ANGLES[nextIndex]);
-  };
 
   const videoUrl = useMemo(() => {
     if (!activeSegment) {
@@ -52,13 +39,13 @@ export function RaceVideoPanel({
     }
 
     const baseUrl = activeSegment.videoUrl;
-    const panPrefix = `pan-${String(currentPanAngle).padStart(3, "0")}`;
+    const panPrefix = `pan-${String(DEFAULT_PAN_ANGLE).padStart(3, "0")}`;
     
     // Replace 'video/' with 'video/pan-XXX/' in the URL
     const panUrl = baseUrl.replace(/^video\//, `video/${panPrefix}/`);
     
     return resolveRelativeUrl(getMediaBaseUrl() ?? manifestUrl, panUrl);
-  }, [activeSegment, manifestUrl, currentPanAngle]);
+  }, [activeSegment, manifestUrl]);
 
   const desiredVideoTimeSeconds = useMemo(() => {
     if (!activeSegment) {
@@ -318,15 +305,6 @@ export function RaceVideoPanel({
           <h2>Cloud video</h2>
           <div className="panel-subtitle">{getVideoFileName(activeSegment.videoUrl)}</div>
         </div>
-        <div className="pan-controls">
-          <button className="pan-button" onClick={handlePanLeft} title="Pan left (240°)">
-            &lt;
-          </button>
-          <span className="pan-indicator">{currentPanAngle}°</span>
-          <button className="pan-button" onClick={handlePanRight} title="Pan right (120°)">
-            &gt;
-          </button>
-        </div>
       </div>
 
       <video
@@ -334,7 +312,6 @@ export function RaceVideoPanel({
         ref={videoRef}
         className="race-video"
         src={videoUrl}
-        controls
         playsInline
         preload="metadata"
       />
