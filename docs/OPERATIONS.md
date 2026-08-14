@@ -14,12 +14,9 @@ python3 scripts/deploy_media_stack.py \
 ### Upload videos manually
 
 ```bash
-aws s3 cp ./videos/race-001.mp4 s3://<BucketName>/media/videos/ --profile devops
-aws s3 sync video s3://<BucketName>/media/videos/ \
-  --profile <aws-profile> \
-  --exclude "*" \
-  --include "*.mp4" \
-  --dryrun
+aws s3 sync /Volumes/Elements/SailinVideos6/2026-PAC-CUP/00-WEB-APP \
+ s3://${WIND_N_CLOUD_S3_BUCKET}/   --profile sailvue   \
+ --exclude "*"   --include "*.mp4"   --exclude "*._*"   
 
 
 ```
