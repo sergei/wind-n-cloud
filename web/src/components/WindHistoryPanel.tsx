@@ -29,6 +29,7 @@ type PaddedDomainOptions = {
   paddingRatio: number;
   lowerBound?: number;
   upperBound?: number;
+  roundToIncrement?: number;
 };
 
 const WIDTH = 420;
@@ -102,12 +103,14 @@ export function WindHistoryPanel({
     paddingRatio: 0.12,
     lowerBound: 0,
     upperBound: 360,
+    roundToIncrement: 5,
   });
 
   const twsDomain = buildPaddedDomain(currentTwsExtent[0], currentTwsExtent[1], {
     minimumSpan: 1,
     paddingRatio: 0.15,
     lowerBound: 0,
+    roundToIncrement: 1,
   });
 
   const twdScale = scaleLinear().domain(twdDomain).range([0, SUBPLOT_WIDTH]);
@@ -122,15 +125,6 @@ export function WindHistoryPanel({
 
   return (
     <section className="panel wind-panel">
-      <div className="panel-header">
-        <div>
-          <h2>Wind history</h2>
-          <div className="panel-subtitle">
-            Newest at top · {historyDurationMinutes} min window
-          </div>
-        </div>
-      </div>
-
       <svg
         className="wind-history-svg"
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -199,15 +193,6 @@ export function WindHistoryPanel({
           </g>
         </g>
       </svg>
-
-      <div className="wind-stats">
-        <span>
-          TWD range: {formatRange(currentTwdExtent[0], currentTwdExtent[1], "°")}
-        </span>
-        <span>
-          TWS range: {formatRange(currentTwsExtent[0], currentTwsExtent[1], " kt")}
-        </span>
-      </div>
     </section>
   );
 }
@@ -307,6 +292,20 @@ function buildPaddedDomain(
     upper = Math.min(options.upperBound, upper);
   }
 
+  if (options.roundToIncrement !== undefined && options.roundToIncrement > 0) {
+    const increment = options.roundToIncrement;
+    lower = Math.floor(lower / increment) * increment;
+    upper = Math.ceil(upper / increment) * increment;
+
+    if (options.lowerBound !== undefined) {
+      lower = Math.max(options.lowerBound, lower);
+    }
+
+    if (options.upperBound !== undefined) {
+      upper = Math.min(options.upperBound, upper);
+    }
+  }
+
   if (lower === upper) {
     upper = lower + options.minimumSpan;
   }
@@ -331,16 +330,4 @@ function formatTick(value: number): string {
   }
 
   return value.toFixed(2);
-}
-
-function formatRange(
-  minValue: number | undefined,
-  maxValue: number | undefined,
-  suffix: string,
-): string {
-  if (minValue === undefined || maxValue === undefined) {
-    return "n/a";
-  }
-
-  return `${minValue.toFixed(1)}–${maxValue.toFixed(1)}${suffix}`;
 }
