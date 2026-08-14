@@ -7,6 +7,7 @@ const DEBUG_PLAYBACK = false;
 const DEFAULT_PAN_ANGLE = 0;
 
 type RaceVideoPanelProps = {
+  raceName: string;
   manifestUrl: string;
   segments: VideoSegment[];
   currentRaceTimeMs: number;
@@ -16,6 +17,7 @@ type RaceVideoPanelProps = {
 };
 
 export function RaceVideoPanel({
+  raceName,
   manifestUrl,
   segments,
   currentRaceTimeMs,
@@ -292,7 +294,12 @@ export function RaceVideoPanel({
   if (!activeSegment) {
     return (
       <section className="panel video-panel">
-        <h2>Cloud video</h2>
+        <div className="panel-header">
+          <div>
+            <h2>{raceName}</h2>
+            <div className="panel-subtitle">No clip available</div>
+          </div>
+        </div>
         <div className="empty-state">No video segments are available.</div>
       </section>
     );
@@ -302,7 +309,7 @@ export function RaceVideoPanel({
     <section className="panel video-panel">
       <div className="panel-header">
         <div>
-          <h2>Cloud video</h2>
+          <h2>{raceName}</h2>
           <div className="panel-subtitle">{getVideoFileName(activeSegment.videoUrl)}</div>
         </div>
       </div>

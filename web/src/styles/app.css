@@ -57,55 +57,6 @@ button:hover {
   padding: 1rem;
 }
 
-.app-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 2rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid rgba(111, 182, 255, 0.22);
-  border-radius: 1rem;
-  background: rgba(7, 19, 34, 0.86);
-  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.28);
-}
-
-.app-header h1 {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.app-header p {
-  margin: 0.25rem 0 0;
-  color: #8aa3bd;
-}
-
-.live-readout {
-  display: flex;
-  gap: 1rem;
-}
-
-.live-readout > div {
-  min-width: 5.5rem;
-  padding: 0.65rem 0.8rem;
-  border: 1px solid rgba(111, 182, 255, 0.2);
-  border-radius: 0.75rem;
-  background: rgba(11, 29, 50, 0.9);
-}
-
-.readout-label {
-  display: block;
-  color: #8aa3bd;
-  font-size: 0.72rem;
-  letter-spacing: 0.08em;
-}
-
-.readout-value {
-  display: block;
-  margin-top: 0.2rem;
-  font-size: 1.35rem;
-  font-weight: 700;
-}
-
 .main-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 460px;

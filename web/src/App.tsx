@@ -4,7 +4,6 @@ import { TimelineControls } from "./components/TimelineControls";
 import { WindHistoryPanel } from "./components/WindHistoryPanel";
 import { loadRaceDataset, type LoadedRaceDataset } from "./data/loadRaceDataset";
 import { getManifestUrl } from "./data/url";
-import { findNearestWindSample } from "./data/windSamples";
 import type { VideoSegment } from "./types/race";
 
 const DEBUG_PLAYBACK = false;
@@ -84,14 +83,6 @@ export function App() {
     return getPlaybackRange(dataset.manifest.videoSegments);
   }, [dataset]);
 
-  const currentSample = useMemo(() => {
-    if (!dataset || currentRaceTimeMs === null) {
-      return null;
-    }
-
-    return findNearestWindSample(dataset.windSamples, currentRaceTimeMs);
-  }, [currentRaceTimeMs, dataset]);
-
   useEffect(() => {
     if (!DEBUG_PLAYBACK || currentRaceTimeMs === null) {
       return;
@@ -141,38 +132,9 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <header className="app-header">
-        <div>
-          <h1>{manifest.displayName}</h1>
-          <p>Cloud video synchronized with wind history</p>
-        </div>
-
-        <div className="live-readout">
-          <div>
-            <span className="readout-label">TWD / TWA</span>
-            <span className="readout-value">
-              {formatDegrees(currentSample?.twd)}
-              <span className={getTwaClassName(currentSample?.twa)}>
-                {" "}
-                {formatSignedDegrees(normalizeSignedDegrees(currentSample?.twa))}
-              </span>
-            </span>
-          </div>
-
-          <div>
-            <span className="readout-label">TWS</span>
-            <span className="readout-value">{formatSpeed(currentSample?.tws)}</span>
-          </div>
-
-          <div>
-            <span className="readout-label">HDG</span>
-            <span className="readout-value">{formatDegrees(currentSample?.heading)}</span>
-          </div>
-        </div>
-      </header>
-
       <div className="main-grid">
         <RaceVideoPanel
+          raceName={manifest.displayName}
           manifestUrl={manifestUrl}
           segments={manifest.videoSegments}
           currentRaceTimeMs={currentRaceTimeMs}
@@ -245,51 +207,6 @@ function clamp(value: number, lower: number, upper: number): number {
   return Math.min(Math.max(value, lower), upper);
 }
 
-function normalizeSignedDegrees(value: number | null | undefined): number | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  return ((value + 180) % 360) - 180;
-}
-
-function formatSignedDegrees(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return "—";
-  }
-
-  const rounded = Math.round(value);
-  const sign = rounded > 0 ? "+" : "";
-
-  return `${sign}${rounded}°`;
-}
-
-function getTwaClassName(value: number | null | undefined): string {
-  const normalized = normalizeSignedDegrees(value);
-
-  if (normalized === null) {
-    return "readout-muted";
-  }
-
-  return normalized >= 0 ? "readout-positive" : "readout-negative";
-}
-
 function formatDateTime(timeMs: number): string {
   return new Date(timeMs).toISOString().replace("T", " ").replace(".000Z", " UTC");
-}
-
-function formatDegrees(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return "—";
-  }
-
-  return `${Math.round(value)}°`;
-}
-
-function formatSpeed(value: number | null | undefined): string {
-  if (value === null || value === undefined) {
-    return "—";
-  }
-
-  return `${value.toFixed(1)} kt`;
 }
