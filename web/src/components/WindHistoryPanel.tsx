@@ -118,6 +118,12 @@ export function WindHistoryPanel({
 
   const twdPathSegments = buildColoredTwdSegments(twdPoints);
   const twsPath = buildPath(twsPoints, twsScale, yScale);
+  const twdCurrent = getCurrentValue(twdPoints);
+  const twsCurrent = getCurrentValue(twsPoints);
+  const twdMedian = calculateCircularMedianDegrees(twdPoints.map((point) => point.value));
+  const twsMedian = calculateMedian(twsPoints.map((point) => point.value));
+  const twdTitle = `TWD ${formatTwdValue(twdCurrent)} · med ${formatTwdValue(twdMedian)}`;
+  const twsTitle = `TWS ${formatTwsValue(twsCurrent)} · med ${formatTwsValue(twsMedian)}`;
 
   const ageTicks = buildAgeTicks(historyDurationMinutes);
   const twdTicks = buildValueTicks(twdDomain);
@@ -147,7 +153,7 @@ export function WindHistoryPanel({
 
           <g>
             <text className="plot-title" x={SUBPLOT_WIDTH / 2} y={-10} textAnchor="middle">
-              TWD
+              {twdTitle}
             </text>
 
             {twdTicks.map((tick) => (
@@ -176,7 +182,7 @@ export function WindHistoryPanel({
 
           <g transform={`translate(${SUBPLOT_WIDTH + PANEL_GAP}, 0)`}>
             <text className="plot-title" x={SUBPLOT_WIDTH / 2} y={-10} textAnchor="middle">
-              TWS
+              {twsTitle}
             </text>
 
             {twsTicks.map((tick) => (
@@ -238,6 +244,74 @@ function buildPath(
       .x((point) => xScale(point.value))
       .y((point) => yScale(point.ageMinutes))(points) ?? ""
   );
+}
+
+function getCurrentValue(points: PlotPoint[]): number | undefined {
+  if (points.length === 0) {
+    return undefined;
+  }
+
+  return points[points.length - 1]?.value;
+}
+
+function calculateMedian(values: number[]): number | undefined {
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const middleIndex = Math.floor(sorted.length / 2);
+
+  if (sorted.length % 2 === 1) {
+    return sorted[middleIndex];
+  }
+
+  return (sorted[middleIndex - 1] + sorted[middleIndex]) / 2;
+}
+
+function calculateCircularMedianDegrees(values: number[]): number | undefined {
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  const reference = calculateCircularMeanDegrees(values);
+  const unwrappedValues = values.map((value) => unwrapAngleAroundReference(value, reference));
+  const unwrappedMedian = calculateMedian(unwrappedValues);
+
+  if (unwrappedMedian === undefined) {
+    return undefined;
+  }
+
+  return normalizeDegrees(unwrappedMedian);
+}
+
+function calculateCircularMeanDegrees(values: number[]): number {
+  const sineSum = values.reduce(
+    (sum, value) => sum + Math.sin((normalizeDegrees(value) * Math.PI) / 180),
+    0,
+  );
+  const cosineSum = values.reduce(
+    (sum, value) => sum + Math.cos((normalizeDegrees(value) * Math.PI) / 180),
+    0,
+  );
+
+  if (Math.abs(sineSum) < 1e-12 && Math.abs(cosineSum) < 1e-12) {
+    return normalizeDegrees(values[0] ?? 0);
+  }
+
+  return normalizeDegrees((Math.atan2(sineSum, cosineSum) * 180) / Math.PI);
+}
+
+function unwrapAngleAroundReference(value: number, reference: number): number {
+  const normalizedValue = normalizeDegrees(value);
+  const normalizedReference = normalizeDegrees(reference);
+  const delta = ((normalizedValue - normalizedReference + 540) % 360) - 180;
+
+  return normalizedReference + delta;
+}
+
+function normalizeDegrees(value: number): number {
+  return ((value % 360) + 360) % 360;
 }
 
 function buildAgeTicks(durationMinutes: number): number[] {
@@ -330,4 +404,20 @@ function formatTick(value: number): string {
   }
 
   return value.toFixed(2);
+}
+
+function formatTwdValue(value: number | undefined): string {
+  if (value === undefined) {
+    return "n/a";
+  }
+
+  return `${Math.round(normalizeDegrees(value))}°`;
+}
+
+function formatTwsValue(value: number | undefined): string {
+  if (value === undefined) {
+    return "n/a";
+  }
+
+  return `${value.toFixed(1)} kt`;
 }
