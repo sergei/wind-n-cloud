@@ -59,7 +59,7 @@ button:hover {
 
 .main-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 460px;
+  grid-template-columns: minmax(0, 1fr) 420px;
   gap: 1rem;
   align-items: stretch;
 }
@@ -96,11 +96,55 @@ button:hover {
   flex-direction: column;
 }
 
+.video-panel.has-dual-video {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.video-grid-container {
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+}
+
+.video-grid-container.single-video-grid {
+  grid-template-columns: 1fr;
+}
+
+.video-grid-container.dual-video-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 1200px) {
+  .video-grid-container.dual-video-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.video-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(111, 182, 255, 0.22);
+  border-radius: 1rem;
+  background: rgba(7, 19, 34, 0.86);
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+
+.video-sub-header {
+  padding: 0.75rem 1rem;
+}
+
 .race-video {
   width: 100%;
-  height: min(70vh, 720px);
+  height: min(65vh, 640px);
   background: #000;
   object-fit: contain;
+}
+
+.satellite-video {
+  background: #03070d;
 }
 
 .empty-state,

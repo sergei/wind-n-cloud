@@ -10,6 +10,7 @@ export type VideoSegment = {
   videoDurationSeconds?: number;
   raceSecondsPerVideoSecond?: number;
   videoUrl: string;
+  satelliteVideoUrl?: string;
 };
 
 export type RaceManifest = {

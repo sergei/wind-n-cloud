@@ -1,0 +1,5 @@
+--manifest=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/00-WEB-APP/manifest.json
+--goes-dir=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/15-PICTURES/50-GOES-IMAGES/COMPOSITE
+--overlays-dir=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/15-PICTURES/50-GOES-IMAGES/wind_overlays
+--coastline-overlay=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/15-PICTURES/50-GOES-IMAGES/GOES18_COASTLINE_OVERLAY.png
+--output-dir=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/00-WEB-APP/video/goes

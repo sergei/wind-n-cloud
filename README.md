@@ -73,12 +73,24 @@ This is the canonical local URL flow:
 python3 data-processing/prepare_web_dataset.py \
   --csv /path/to/insv-frame-data.csv \
   --mp4-dir /path/to/mp4-files \
+  --goes-dir data-processing/sample-data/goes \
+  --generate-satellite-videos \
   --output-dir /path/to/web-dataset
+```
+
+Or generate satellite MP4 videos separately:
+
+```bash
+python3 data-processing/generate_satellite_videos.py \
+  --manifest /path/to/web-dataset/manifest.json \
+  --goes-dir data-processing/sample-data/goes \
+  --output-dir /path/to/web-dataset/satellite-video
 ```
 
 This writes:
 - `/path/to/web-dataset/manifest.json`
 - `/path/to/web-dataset/data/wind-samples.json`
+- `/path/to/web-dataset/satellite-video/sat_*.mp4`
 
 ### 2) Serve dataset files on port 8000
 

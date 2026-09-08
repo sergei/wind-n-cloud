@@ -1,6 +1,9 @@
+--display-name=Sun Dragon -  Pacific Cup 2026
 --csv=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/20-DATA/clouds.csv
 --mp4-dir=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/00-WEB-APP/video
+--satellite-mp4-dir=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/00-WEB-APP/video/goes
 --output-dir=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/00-WEB-APP
 --upload-to-s3
 --aws-profile=sailvue
 --s3-bucket=wind-n-cloud-media-992382765816-us-east-1
+--public-satellite-prefix=video/goes

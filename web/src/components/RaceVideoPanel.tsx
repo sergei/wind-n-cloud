@@ -25,7 +25,8 @@ export function RaceVideoPanel({
   onRaceTimeChange,
   onPlayingChange,
 }: RaceVideoPanelProps) {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
+  const satelliteVideoRef = useRef<HTMLVideoElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const suppressVideoTimeUpdatesRef = useRef(false);
   const lastLoggedVideoSecondRef = useRef<number | null>(null);
@@ -35,18 +36,29 @@ export function RaceVideoPanel({
     [segments, currentRaceTimeMs],
   );
 
-  const videoUrl = useMemo(() => {
+  const cameraVideoUrl = useMemo(() => {
     if (!activeSegment) {
       return "";
     }
 
     const baseUrl = activeSegment.videoUrl;
     const panPrefix = `pan-${String(DEFAULT_PAN_ANGLE).padStart(3, "0")}`;
-    
+
     // Replace 'video/' with 'video/pan-XXX/' in the URL
     const panUrl = baseUrl.replace(/^video\//, `video/${panPrefix}/`);
-    
+
     return resolveRelativeUrl(getMediaBaseUrl() ?? manifestUrl, panUrl);
+  }, [activeSegment, manifestUrl]);
+
+  const satelliteVideoUrl = useMemo(() => {
+    if (!activeSegment || !activeSegment.satelliteVideoUrl) {
+      return "";
+    }
+
+    return resolveRelativeUrl(
+      getMediaBaseUrl() ?? manifestUrl,
+      activeSegment.satelliteVideoUrl,
+    );
   }, [activeSegment, manifestUrl]);
 
   const desiredVideoTimeSeconds = useMemo(() => {
@@ -76,40 +88,68 @@ export function RaceVideoPanel({
       videoDurationSeconds: activeSegment.videoDurationSeconds,
       raceSecondsPerVideoSecond: getRaceSecondsPerVideoSecond(activeSegment),
       desiredVideoTimeSeconds,
-      videoUrl,
+      cameraVideoUrl,
+      satelliteVideoUrl,
     });
-  }, [activeSegment, currentRaceTimeMs, desiredVideoTimeSeconds, isPlaying, videoUrl]);
+  }, [
+    activeSegment,
+    currentRaceTimeMs,
+    desiredVideoTimeSeconds,
+    isPlaying,
+    cameraVideoUrl,
+    satelliteVideoUrl,
+  ]);
 
+  // Handle paused seek / time synchronization
   useEffect(() => {
-    const video = videoRef.current;
+    const cameraVideo = cameraVideoRef.current;
+    const satelliteVideo = satelliteVideoRef.current;
 
-    if (!video || !activeSegment || isPlaying) {
+    if (!cameraVideo || !activeSegment || isPlaying) {
       return;
     }
 
     let cancelled = false;
 
-    const syncVideoToRaceTime = async () => {
+    const syncVideosToRaceTime = async () => {
       suppressVideoTimeUpdatesRef.current = true;
 
-      await waitForMetadata(video);
+      const waitPromises: Promise<void>[] = [waitForMetadata(cameraVideo)];
+      if (satelliteVideo && satelliteVideoUrl) {
+        waitPromises.push(waitForMetadata(satelliteVideo));
+      }
+
+      await Promise.all(waitPromises);
 
       if (cancelled) {
         return;
       }
 
-      if (Math.abs(video.currentTime - desiredVideoTimeSeconds) > 0.2) {
+      const seekPromises: Promise<void>[] = [];
+
+      if (Math.abs(cameraVideo.currentTime - desiredVideoTimeSeconds) > 0.2) {
         if (DEBUG_PLAYBACK) {
-          console.log("[RaceVideoPanel] paused seek", {
-            fromVideoTime: video.currentTime,
+          console.log("[RaceVideoPanel] paused camera seek", {
+            fromVideoTime: cameraVideo.currentTime,
             toVideoTime: desiredVideoTimeSeconds,
             currentRaceTimeMs,
-            currentIso: formatDateTime(currentRaceTimeMs),
           });
         }
+        cameraVideo.currentTime = desiredVideoTimeSeconds;
+        seekPromises.push(waitForSeek(cameraVideo));
+      }
 
-        video.currentTime = desiredVideoTimeSeconds;
-        await waitForSeek(video);
+      if (
+        satelliteVideo &&
+        satelliteVideoUrl &&
+        Math.abs(satelliteVideo.currentTime - desiredVideoTimeSeconds) > 0.2
+      ) {
+        satelliteVideo.currentTime = desiredVideoTimeSeconds;
+        seekPromises.push(waitForSeek(satelliteVideo));
+      }
+
+      if (seekPromises.length > 0) {
+        await Promise.all(seekPromises);
       }
 
       if (!cancelled) {
@@ -117,18 +157,27 @@ export function RaceVideoPanel({
       }
     };
 
-    void syncVideoToRaceTime();
+    void syncVideosToRaceTime();
 
     return () => {
       cancelled = true;
       suppressVideoTimeUpdatesRef.current = false;
     };
-  }, [activeSegment, desiredVideoTimeSeconds, isPlaying, currentRaceTimeMs, videoUrl]);
+  }, [
+    activeSegment,
+    desiredVideoTimeSeconds,
+    isPlaying,
+    currentRaceTimeMs,
+    cameraVideoUrl,
+    satelliteVideoUrl,
+  ]);
 
+  // Handle playback start/stop & continuous animation loop
   useEffect(() => {
-    const video = videoRef.current;
+    const cameraVideo = cameraVideoRef.current;
+    const satelliteVideo = satelliteVideoRef.current;
 
-    if (!video || !activeSegment) {
+    if (!cameraVideo || !activeSegment) {
       return;
     }
 
@@ -144,7 +193,7 @@ export function RaceVideoPanel({
     const updateRaceTimeFromPlayingVideo = () => {
       if (
         cancelled ||
-        video.paused ||
+        cameraVideo.paused ||
         !activeSegment ||
         suppressVideoTimeUpdatesRef.current
       ) {
@@ -154,19 +203,22 @@ export function RaceVideoPanel({
 
       const raceOffsetSeconds = videoSecondsToRaceSeconds(
         activeSegment,
-        video.currentTime,
+        cameraVideo.currentTime,
       );
 
       const nextRaceTimeMs =
         activeSegment.startTimeMs + raceOffsetSeconds * 1000;
 
-      const currentWholeVideoSecond = Math.floor(video.currentTime);
+      const currentWholeVideoSecond = Math.floor(cameraVideo.currentTime);
 
-      if (DEBUG_PLAYBACK && lastLoggedVideoSecondRef.current !== currentWholeVideoSecond) {
+      if (
+        DEBUG_PLAYBACK &&
+        lastLoggedVideoSecondRef.current !== currentWholeVideoSecond
+      ) {
         lastLoggedVideoSecondRef.current = currentWholeVideoSecond;
 
         console.log("[RaceVideoPanel] playback tick", {
-          videoCurrentTime: video.currentTime,
+          videoCurrentTime: cameraVideo.currentTime,
           raceOffsetSeconds,
           raceSecondsPerVideoSecond: getRaceSecondsPerVideoSecond(activeSegment),
           nextRaceTimeMs,
@@ -174,9 +226,21 @@ export function RaceVideoPanel({
         });
       }
 
+      // Check for satellite video drift during continuous playback
+      if (
+        satelliteVideo &&
+        satelliteVideoUrl &&
+        !satelliteVideo.paused &&
+        Math.abs(satelliteVideo.currentTime - cameraVideo.currentTime) > 0.3
+      ) {
+        satelliteVideo.currentTime = cameraVideo.currentTime;
+      }
+
       onRaceTimeChange(nextRaceTimeMs);
 
-      animationFrameRef.current = requestAnimationFrame(updateRaceTimeFromPlayingVideo);
+      animationFrameRef.current = requestAnimationFrame(
+        updateRaceTimeFromPlayingVideo,
+      );
     };
 
     const startPlaybackFromCurrentRaceTime = async () => {
@@ -184,25 +248,35 @@ export function RaceVideoPanel({
       suppressVideoTimeUpdatesRef.current = true;
       lastLoggedVideoSecondRef.current = null;
 
-      await waitForMetadata(video);
+      const waitPromises: Promise<void>[] = [waitForMetadata(cameraVideo)];
+      if (satelliteVideo && satelliteVideoUrl) {
+        waitPromises.push(waitForMetadata(satelliteVideo));
+      }
+
+      await Promise.all(waitPromises);
 
       if (cancelled) {
         return;
       }
 
-      if (Math.abs(video.currentTime - desiredVideoTimeSeconds) > 0.2) {
-        if (DEBUG_PLAYBACK) {
-          console.log("[RaceVideoPanel] play seek before start", {
-            fromVideoTime: video.currentTime,
-            toVideoTime: desiredVideoTimeSeconds,
-            currentRaceTimeMs,
-            currentIso: formatDateTime(currentRaceTimeMs),
-            raceSecondsPerVideoSecond: getRaceSecondsPerVideoSecond(activeSegment),
-          });
-        }
+      const seekPromises: Promise<void>[] = [];
 
-        video.currentTime = desiredVideoTimeSeconds;
-        await waitForSeek(video);
+      if (Math.abs(cameraVideo.currentTime - desiredVideoTimeSeconds) > 0.2) {
+        cameraVideo.currentTime = desiredVideoTimeSeconds;
+        seekPromises.push(waitForSeek(cameraVideo));
+      }
+
+      if (
+        satelliteVideo &&
+        satelliteVideoUrl &&
+        Math.abs(satelliteVideo.currentTime - desiredVideoTimeSeconds) > 0.2
+      ) {
+        satelliteVideo.currentTime = desiredVideoTimeSeconds;
+        seekPromises.push(waitForSeek(satelliteVideo));
+      }
+
+      if (seekPromises.length > 0) {
+        await Promise.all(seekPromises);
       }
 
       if (cancelled) {
@@ -212,14 +286,17 @@ export function RaceVideoPanel({
       suppressVideoTimeUpdatesRef.current = false;
 
       try {
-        await video.play();
+        const playPromises: Promise<void>[] = [cameraVideo.play()];
+        if (satelliteVideo && satelliteVideoUrl) {
+          playPromises.push(satelliteVideo.play());
+        }
+
+        await Promise.all(playPromises);
 
         if (DEBUG_PLAYBACK) {
           console.log("[RaceVideoPanel] play started", {
-            videoCurrentTime: video.currentTime,
+            cameraCurrentTime: cameraVideo.currentTime,
             currentRaceTimeMs,
-            currentIso: formatDateTime(currentRaceTimeMs),
-            raceSecondsPerVideoSecond: getRaceSecondsPerVideoSecond(activeSegment),
           });
         }
 
@@ -238,7 +315,10 @@ export function RaceVideoPanel({
     if (isPlaying) {
       void startPlaybackFromCurrentRaceTime();
     } else {
-      video.pause();
+      cameraVideo.pause();
+      if (satelliteVideo) {
+        satelliteVideo.pause();
+      }
       stopAnimationLoop();
       suppressVideoTimeUpdatesRef.current = false;
     }
@@ -255,13 +335,15 @@ export function RaceVideoPanel({
     onPlayingChange,
     onRaceTimeChange,
     currentRaceTimeMs,
-    videoUrl,
+    cameraVideoUrl,
+    satelliteVideoUrl,
   ]);
 
+  // Handle video pause and ended events
   useEffect(() => {
-    const video = videoRef.current;
+    const cameraVideo = cameraVideoRef.current;
 
-    if (!video || !activeSegment) {
+    if (!cameraVideo || !activeSegment) {
       return;
     }
 
@@ -282,12 +364,12 @@ export function RaceVideoPanel({
       onRaceTimeChange(nextSegment.startTimeMs);
     };
 
-    video.addEventListener("pause", handlePause);
-    video.addEventListener("ended", handleEnded);
+    cameraVideo.addEventListener("pause", handlePause);
+    cameraVideo.addEventListener("ended", handleEnded);
 
     return () => {
-      video.removeEventListener("pause", handlePause);
-      video.removeEventListener("ended", handleEnded);
+      cameraVideo.removeEventListener("pause", handlePause);
+      cameraVideo.removeEventListener("ended", handleEnded);
     };
   }, [activeSegment, onPlayingChange, onRaceTimeChange, segments]);
 
@@ -305,23 +387,51 @@ export function RaceVideoPanel({
     );
   }
 
-  return (
-    <section className="panel video-panel">
-      <div className="panel-header">
-        <div>
-          <h2>{raceName}</h2>
-          <div className="panel-subtitle">{getVideoFileName(activeSegment.videoUrl)}</div>
-        </div>
-      </div>
+  const hasSatelliteVideo = Boolean(satelliteVideoUrl);
 
-      <video
-        key={activeSegment.id}
-        ref={videoRef}
-        className="race-video"
-        src={videoUrl}
-        playsInline
-        preload="metadata"
-      />
+  return (
+    <section className={`panel video-panel ${hasSatelliteVideo ? "has-dual-video" : ""}`}>
+      <div className={`video-grid-container ${hasSatelliteVideo ? "dual-video-grid" : "single-video-grid"}`}>
+        <div className="video-card">
+          <div className="panel-header video-sub-header">
+            <div>
+              <h2>{raceName} (Onboard Camera)</h2>
+              <div className="panel-subtitle">{getVideoFileName(activeSegment.videoUrl)}</div>
+            </div>
+          </div>
+          <video
+            key={`camera-${activeSegment.id}`}
+            ref={cameraVideoRef}
+            className="race-video"
+            src={cameraVideoUrl}
+            playsInline
+            preload="metadata"
+            muted
+          />
+        </div>
+
+        {hasSatelliteVideo && (
+          <div className="video-card">
+            <div className="panel-header video-sub-header">
+              <div>
+                <h2>Satellite &amp; Wind Overlay</h2>
+                <div className="panel-subtitle">
+                  {getVideoFileName(activeSegment.satelliteVideoUrl ?? "")}
+                </div>
+              </div>
+            </div>
+            <video
+              key={`satellite-${activeSegment.id}`}
+              ref={satelliteVideoRef}
+              className="race-video satellite-video"
+              src={satelliteVideoUrl}
+              playsInline
+              preload="metadata"
+              muted
+            />
+          </div>
+        )}
+      </div>
     </section>
   );
 }

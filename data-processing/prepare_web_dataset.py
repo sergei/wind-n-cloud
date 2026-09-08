@@ -187,13 +187,16 @@ def read_frame_csv(csv_path: Path) -> list[dict[str, Any]]:
 
 def find_mp4_file(mp4_dir: Path, mp4_name: str) -> Path | None:
     direct_path = mp4_dir / mp4_name
-    if direct_path.is_file():
+    if direct_path.is_file() and not direct_path.name.startswith("."):
         return direct_path
 
     matches = [
         path
         for path in mp4_dir.rglob("*")
-        if path.is_file() and path.name == mp4_name
+        if path.is_file()
+        and not path.name.startswith(".")
+        and not path.name.startswith("._")
+        and path.name == mp4_name
     ]
 
     if not matches:
@@ -277,11 +280,39 @@ def infer_frame_interval_seconds(clip_rows: list[dict[str, Any]]) -> float:
     return (intervals[middle - 1] + intervals[middle]) / 2
 
 
+def find_satellite_mp4_file(satellite_dir: Path, mp4_name: str) -> Path | None:
+    candidates = [
+        f"sat_{mp4_name}",
+        f"SAT_{mp4_name}",
+        mp4_name,
+    ]
+    for cand in candidates:
+        cand_path = satellite_dir / cand
+        if cand_path.is_file() and not cand_path.name.startswith("."):
+            return cand_path
+
+    for cand in candidates:
+        matches = [
+            path
+            for path in satellite_dir.rglob("*")
+            if path.is_file()
+            and not path.name.startswith(".")
+            and not path.name.startswith("._")
+            and path.name == cand
+        ]
+        if matches:
+            return sorted(matches)[0]
+
+    return None
+
+
 def build_video_segments(
     rows: list[dict[str, Any]],
     mp4_dir: Path,
     public_video_prefix: str,
     fail_on_missing_video: bool,
+    satellite_mp4_dir: Path | None = None,
+    public_satellite_prefix: str | None = None,
 ) -> list[dict[str, Any]]:
     print(f"Building video segment metadata from MP4 directory: {mp4_dir}")
 
@@ -374,24 +405,33 @@ def build_video_segments(
             f"scale {race_seconds_per_video_second:.6f} race-sec/video-sec"
         )
 
-        segments.append(
-            {
-                "id": segment_id,
-                "startTime": format_iso_utc(start_time),
-                "endTime": format_iso_utc(end_time),
-                "startTimeMs": start_time_ms,
-                "endTimeMs": end_time_ms,
-                "frameCount": len(clip_rows),
-                "frameIntervalSeconds": round(frame_interval_seconds, 6),
-                "raceDurationSeconds": round(race_duration_seconds, 6),
-                "videoDurationSeconds": round(video_duration_seconds, 6),
-                "raceSecondsPerVideoSecond": round(
-                    race_seconds_per_video_second,
-                    9,
-                ),
-                "videoUrl": public_url_join(public_video_prefix, mp4_name),
-            }
-        )
+        segment_data: dict[str, Any] = {
+            "id": segment_id,
+            "startTime": format_iso_utc(start_time),
+            "endTime": format_iso_utc(end_time),
+            "startTimeMs": start_time_ms,
+            "endTimeMs": end_time_ms,
+            "frameCount": len(clip_rows),
+            "frameIntervalSeconds": round(frame_interval_seconds, 6),
+            "raceDurationSeconds": round(race_duration_seconds, 6),
+            "videoDurationSeconds": round(video_duration_seconds, 6),
+            "raceSecondsPerVideoSecond": round(
+                race_seconds_per_video_second,
+                9,
+            ),
+            "videoUrl": public_url_join(public_video_prefix, mp4_name),
+        }
+
+        if satellite_mp4_dir and satellite_mp4_dir.is_dir():
+            sat_file = find_satellite_mp4_file(satellite_mp4_dir, mp4_name)
+            if sat_file:
+                segment_data["satelliteVideoUrl"] = public_url_join(
+                    public_satellite_prefix,
+                    sat_file.name,
+                )
+                print(f"    -> Paired satellite video: {sat_file.name}")
+
+        segments.append(segment_data)
 
     segments.sort(key=lambda item: item["startTimeMs"])
 
@@ -628,12 +668,63 @@ def main() -> None:
     )
 
     parser.add_argument(
+        "--satellite-mp4-dir",
+        type=Path,
+        default=None,
+        help="Optional directory containing pre-generated satellite MP4 files.",
+    )
+
+    parser.add_argument(
+        "--public-satellite-prefix",
+        default=None,
+        help=(
+            "URL prefix written into manifest for satellite MP4 video files. "
+            "If omitted, it defaults to satellite-video or <asset-base-url>/satellite-video when "
+            "--asset-base-url is set."
+        ),
+    )
+
+    parser.add_argument(
+        "--goes-dir",
+        type=Path,
+        default=None,
+        help="Directory containing GOES satellite PNGs and XML/PGW metadata to generate satellite videos.",
+    )
+
+    parser.add_argument(
+        "--satellite-overlays-dir",
+        type=Path,
+        default=None,
+        help="Directory containing wind overlays (default: <goes-dir>/wind_overlays).",
+    )
+
+    parser.add_argument(
+        "--coastline-overlay",
+        type=Path,
+        default=None,
+        help="PNG layer to apply as the topmost overlay on every generated satellite frame.",
+    )
+
+    parser.add_argument(
+        "--generate-satellite-videos",
+        action="store_true",
+        help="Automatically generate synchronized satellite MP4 videos from --goes-dir.",
+    )
+
+    parser.add_argument(
+        "--max-satellite-seconds",
+        type=float,
+        default=None,
+        help="Optional debug cap: generate only the first N seconds of each satellite video.",
+    )
+
+    parser.add_argument(
         "--asset-base-url",
         default=None,
         help=(
-            "Optional base URL for both data and video assets. "
-            "When set, default manifest URLs become <asset-base-url>/data/wind-samples.json "
-            "and <asset-base-url>/video."
+            "Optional base URL for data, video, and satellite assets. "
+            "When set, default manifest URLs become <asset-base-url>/data/wind-samples.json, "
+            "<asset-base-url>/video, and <asset-base-url>/satellite-video."
         ),
     )
 
@@ -706,12 +797,26 @@ def main() -> None:
         if asset_base_url
         else "data/wind-samples.json"
     )
+    public_satellite_prefix = (
+        args.public_satellite_prefix
+        if args.public_satellite_prefix
+        else public_url_join(asset_base_url, "satellite-video")
+        if asset_base_url
+        else "satellite-video"
+    )
+
     public_video_prefix = (
         args.public_video_prefix
         if args.public_video_prefix
         else public_url_join(asset_base_url, "video")
         if asset_base_url
         else "video"
+    )
+
+    satellite_mp4_dir = (
+        args.satellite_mp4_dir.expanduser().resolve()
+        if args.satellite_mp4_dir
+        else None
     )
 
     if not csv_path.is_file():
@@ -727,6 +832,8 @@ def main() -> None:
         mp4_dir=mp4_dir,
         public_video_prefix=public_video_prefix,
         fail_on_missing_video=not args.allow_missing_video,
+        satellite_mp4_dir=satellite_mp4_dir,
+        public_satellite_prefix=public_satellite_prefix,
     )
 
     if not segments:
@@ -743,8 +850,34 @@ def main() -> None:
         default_history_minutes=args.default_history_minutes,
     )
 
+    manifest_file = output_dir / "manifest.json"
     write_json(output_dir / "data" / "wind-samples.json", wind_samples)
-    write_json(output_dir / "manifest.json", manifest)
+    write_json(manifest_file, manifest)
+
+    if args.generate_satellite_videos or args.goes_dir:
+        if not args.goes_dir:
+            raise ValueError("--goes-dir is required when --generate-satellite-videos is set")
+
+        from generate_satellite_videos import generate_satellite_videos_for_manifest
+
+        sat_output_dir = (
+            satellite_mp4_dir
+            if satellite_mp4_dir
+            else output_dir / "satellite-video"
+        )
+        generate_satellite_videos_for_manifest(
+            manifest_path=manifest_file,
+            goes_dir=args.goes_dir.expanduser().resolve(),
+            overlays_dir=args.satellite_overlays_dir.expanduser().resolve()
+            if args.satellite_overlays_dir
+            else None,
+            output_dir=sat_output_dir,
+            public_satellite_prefix=public_satellite_prefix,
+            coastline_overlay_path=args.coastline_overlay.expanduser().resolve()
+            if args.coastline_overlay
+            else None,
+            max_seconds=args.max_satellite_seconds,
+        )
 
     if args.upload_to_s3:
         if not args.s3_bucket:
