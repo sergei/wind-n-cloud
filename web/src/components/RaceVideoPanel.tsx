@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { VideoSegment } from "../types/race";
 import { findNextSegment } from "../playback/findSegmentForTime";
 import { getMediaBaseUrl, resolveRelativeUrl } from "../data/url";
@@ -30,6 +30,11 @@ export function RaceVideoPanel({
   const animationFrameRef = useRef<number | null>(null);
   const suppressVideoTimeUpdatesRef = useRef(false);
   const lastLoggedVideoSecondRef = useRef<number | null>(null);
+  const [expandedVideo, setExpandedVideo] = useState<"camera" | "satellite" | null>(
+    null,
+  );
+  const cameraCardRef = useRef<HTMLDivElement | null>(null);
+  const satelliteCardRef = useRef<HTMLDivElement | null>(null);
 
   const activeSegment = useMemo(
     () => findBestSegmentForTime(segments, currentRaceTimeMs),
@@ -389,14 +394,52 @@ export function RaceVideoPanel({
 
   const hasSatelliteVideo = Boolean(satelliteVideoUrl);
 
+  const handleToggleFullscreen = useCallback((target: "camera" | "satellite") => {
+    const card = target === "camera" ? cameraCardRef.current : satelliteCardRef.current;
+
+    if (!card) {
+      return;
+    }
+
+    if (document.fullscreenElement === card) {
+      void document.exitFullscreen();
+      return;
+    }
+
+    void card.requestFullscreen();
+  }, []);
+
   return (
-    <section className={`panel video-panel ${hasSatelliteVideo ? "has-dual-video" : ""}`}>
-      <div className={`video-grid-container ${hasSatelliteVideo ? "dual-video-grid" : "single-video-grid"}`}>
-        <div className="video-card">
+    <section
+      className={`panel video-panel ${hasSatelliteVideo ? "has-dual-video" : ""} ${
+        expandedVideo ? "has-expanded-video" : ""
+      }`}
+    >
+      <div
+        className={`video-grid-container ${hasSatelliteVideo ? "dual-video-grid" : "single-video-grid"} ${
+          expandedVideo ? `expanded-${expandedVideo}` : ""
+        }`}
+      >
+        <div ref={cameraCardRef} className="video-card fullscreen-video-card">
           <div className="panel-header video-sub-header">
             <div>
               <h2>{raceName} (Onboard Camera)</h2>
               <div className="panel-subtitle">{getVideoFileName(activeSegment.videoUrl)}</div>
+            </div>
+            <div className="video-controls">
+              {hasSatelliteVideo && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedVideo((current) => (current === "camera" ? null : "camera"))
+                  }
+                >
+                  {expandedVideo === "camera" ? "Show both" : "Expand"}
+                </button>
+              )}
+              <button type="button" onClick={() => handleToggleFullscreen("camera")}>
+                Fullscreen
+              </button>
             </div>
           </div>
           <video
@@ -411,13 +454,28 @@ export function RaceVideoPanel({
         </div>
 
         {hasSatelliteVideo && (
-          <div className="video-card">
+          <div ref={satelliteCardRef} className="video-card fullscreen-video-card">
             <div className="panel-header video-sub-header">
               <div>
                 <h2>Satellite &amp; Wind Overlay</h2>
                 <div className="panel-subtitle">
                   {getVideoFileName(activeSegment.satelliteVideoUrl ?? "")}
                 </div>
+              </div>
+              <div className="video-controls">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedVideo((current) =>
+                      current === "satellite" ? null : "satellite",
+                    )
+                  }
+                >
+                  {expandedVideo === "satellite" ? "Show both" : "Expand"}
+                </button>
+                <button type="button" onClick={() => handleToggleFullscreen("satellite")}>
+                  Fullscreen
+                </button>
               </div>
             </div>
             <video
