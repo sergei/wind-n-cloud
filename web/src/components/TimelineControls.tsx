@@ -1,3 +1,4 @@
+import { formatDateTime } from "../utils/formatDateTime";
 const DEBUG_PLAYBACK = false;
 
 type TimelineControlsProps = {
@@ -129,10 +130,6 @@ export function TimelineControls({
 
 function clamp(value: number, lower: number, upper: number): number {
   return Math.min(Math.max(value, lower), upper);
-}
-
-function formatDateTime(timeMs: number): string {
-  return new Date(timeMs).toISOString().replace("T", " ").replace(".000Z", " UTC");
 }
 
 function formatDuration(totalSeconds: number): string {

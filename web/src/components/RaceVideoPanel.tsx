@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { VideoSegment } from "../types/race";
 import { findNextSegment } from "../playback/findSegmentForTime";
 import { getMediaBaseUrl, resolveRelativeUrl } from "../data/url";
+import { formatDateTime } from "../utils/formatDateTime";
 
 const DEBUG_PLAYBACK = false;
 const DEFAULT_PAN_ANGLE = 0;
@@ -594,10 +595,6 @@ function waitForSeek(video: HTMLVideoElement): Promise<void> {
       { once: true },
     );
   });
-}
-
-function formatDateTime(timeMs: number): string {
-  return new Date(timeMs).toISOString().replace("T", " ").replace(".000Z", " UTC");
 }
 
 function clamp(value: number, lower: number, upper: number): number {
