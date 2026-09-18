@@ -103,6 +103,7 @@ export function App() {
           <h1>wind-n-cloud</h1>
           <p>{error}</p>
         </div>
+        <AppFooter />
       </main>
     );
   }
@@ -114,6 +115,7 @@ export function App() {
           <h1>wind-n-cloud</h1>
           <p>Loading race dataset…</p>
         </div>
+        <AppFooter />
       </main>
     );
   }
@@ -125,6 +127,7 @@ export function App() {
           <h1>wind-n-cloud</h1>
           <p>No video segments are available in the manifest.</p>
         </div>
+        <AppFooter />
       </main>
     );
   }
@@ -180,7 +183,17 @@ export function App() {
         }
         onHistoryDurationChange={setHistoryDurationMinutes}
       />
+      <AppFooter />
     </main>
+  );
+}
+
+function AppFooter() {
+  return (
+    <footer className="app-footer">
+      <span>&copy; 2026 SunFastCam. All rights reserved.</span>{" "}
+      <a href="https://www.youtube.com/@SunFastCam">SunFastCam</a>
+    </footer>
   );
 }
 

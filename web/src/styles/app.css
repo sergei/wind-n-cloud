@@ -374,3 +374,19 @@ button:hover {
 .timeline-scale-end {
   justify-self: end;
 }
+
+.app-footer {
+  margin-top: auto;
+  padding: 0.5rem 0 0;
+  text-align: center;
+  color: #8aa3bd;
+  font-size: 0.8rem;
+}
+
+.app-footer a {
+  color: #6fb6ff;
+}
+
+.app-footer a:hover {
+  color: #9bccff;
+}
