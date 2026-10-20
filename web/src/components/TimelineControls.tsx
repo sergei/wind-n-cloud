@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { formatDateTime } from "../utils/formatDateTime";
 const DEBUG_PLAYBACK = false;
 
@@ -11,6 +12,7 @@ type TimelineControlsProps = {
   onRaceTimeChange: (raceTimeMs: number) => void;
   onPlayingChange: (isPlaying: boolean) => void;
   onHistoryDurationChange: (durationMinutes: number) => void;
+  onShare: () => Promise<void>;
 };
 
 export function TimelineControls({
@@ -23,7 +25,25 @@ export function TimelineControls({
   onRaceTimeChange,
   onPlayingChange,
   onHistoryDurationChange,
+  onShare,
 }: TimelineControlsProps) {
+  const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "failed">("idle");
+
+  useEffect(() => {
+    if (shareStatus === "idle") {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setShareStatus("idle"), 2000);
+    return () => window.clearTimeout(timeoutId);
+  }, [shareStatus]);
+
+  const handleShareClick = () => {
+    onShare()
+      .then(() => setShareStatus("copied"))
+      .catch(() => setShareStatus("failed"));
+  };
+
   const durationSeconds = Math.max(0, Math.round((endTimeMs - startTimeMs) / 1000));
   const currentOffsetSeconds = clamp(
     Math.round((currentRaceTimeMs - startTimeMs) / 1000),
@@ -105,6 +125,18 @@ export function TimelineControls({
             ))}
           </select>
         </label>
+
+        <button
+          className="share-button"
+          onClick={handleShareClick}
+          title="Copy a link to the current time and view"
+        >
+          {shareStatus === "copied"
+            ? "Link copied"
+            : shareStatus === "failed"
+              ? "Copy failed"
+              : "Share"}
+        </button>
 
         <div className="current-time-display">{formatDateTime(currentRaceTimeMs)}</div>
       </div>

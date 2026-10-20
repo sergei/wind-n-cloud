@@ -29,6 +29,53 @@ export function getManifestUrl(): string {
   return getEnvString("VITE_DEFAULT_MANIFEST_URL") ?? DEFAULT_MANIFEST_URL;
 }
 
+export type SharedViewState = {
+  raceTimeMs?: number;
+  historyDurationMinutes?: number;
+  expandedVideo?: "camera" | "satellite" | null;
+};
+
+export function getSharedViewState(): SharedViewState {
+  const params = new URLSearchParams(window.location.search);
+  const state: SharedViewState = {};
+
+  const time = params.get("t");
+  if (time) {
+    const raceTimeMs = Date.parse(time);
+    if (Number.isFinite(raceTimeMs)) {
+      state.raceTimeMs = raceTimeMs;
+    }
+  }
+
+  const history = Number(params.get("history"));
+  if (Number.isFinite(history) && history > 0) {
+    state.historyDurationMinutes = history;
+  }
+
+  const view = params.get("view");
+  if (view === "camera" || view === "satellite") {
+    state.expandedVideo = view;
+  }
+
+  return state;
+}
+
+export function buildShareUrl(state: Required<SharedViewState>): string {
+  const url = new URL(window.location.href);
+  const raceTime = new Date(Math.floor((state.raceTimeMs ?? 0) / 1000) * 1000);
+
+  url.searchParams.set("t", raceTime.toISOString().replace(".000Z", "Z"));
+  url.searchParams.set("history", String(state.historyDurationMinutes));
+
+  if (state.expandedVideo) {
+    url.searchParams.set("view", state.expandedVideo);
+  } else {
+    url.searchParams.delete("view");
+  }
+
+  return url.toString();
+}
+
 export function getMediaBaseUrl(): string | undefined {
   return getEnvString("VITE_MEDIA_BASE_URL");
 }

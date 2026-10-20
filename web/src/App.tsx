@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RaceVideoPanel } from "./components/RaceVideoPanel";
+import { RaceVideoPanel, type ExpandedVideo } from "./components/RaceVideoPanel";
 import { TimelineControls } from "./components/TimelineControls";
 import { WindHistoryPanel } from "./components/WindHistoryPanel";
 import { loadRaceDataset, type LoadedRaceDataset } from "./data/loadRaceDataset";
-import { getManifestUrl } from "./data/url";
+import { buildShareUrl, getManifestUrl, getSharedViewState } from "./data/url";
 import type { VideoSegment } from "./types/race";
 import { formatDateTime } from "./utils/formatDateTime";
 
@@ -15,6 +15,7 @@ export function App() {
   const [currentRaceTimeMs, setCurrentRaceTimeMs] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [historyDurationMinutes, setHistoryDurationMinutes] = useState(60);
+  const [expandedVideo, setExpandedVideo] = useState<ExpandedVideo>(null);
 
   const setRaceTimeFromSource = useCallback(
     (source: string, nextRaceTimeMs: number) => {
@@ -48,8 +49,15 @@ export function App() {
     loadRaceDataset(manifestUrl)
       .then((loadedDataset) => {
         const playbackRange = getPlaybackRange(loadedDataset.manifest.videoSegments);
-        const initialRaceTimeMs =
+        const sharedState = getSharedViewState();
+        const defaultRaceTimeMs =
           playbackRange?.startTimeMs ?? loadedDataset.manifest.startTimeMs;
+        const initialRaceTimeMs =
+          sharedState.raceTimeMs !== undefined && playbackRange
+            ? clamp(sharedState.raceTimeMs, playbackRange.startTimeMs, playbackRange.endTimeMs)
+            : defaultRaceTimeMs;
+        const availableHistoryDurations =
+          loadedDataset.manifest.defaults.availableWindHistoryDurationsMinutes;
 
         if (DEBUG_PLAYBACK) {
           console.log("[App] dataset loaded", {
@@ -68,8 +76,12 @@ export function App() {
         setDataset(loadedDataset);
         setCurrentRaceTimeMs(initialRaceTimeMs);
         setHistoryDurationMinutes(
-          loadedDataset.manifest.defaults.windHistoryDurationMinutes,
+          sharedState.historyDurationMinutes !== undefined &&
+            availableHistoryDurations.includes(sharedState.historyDurationMinutes)
+            ? sharedState.historyDurationMinutes
+            : loadedDataset.manifest.defaults.windHistoryDurationMinutes,
         );
+        setExpandedVideo(sharedState.expandedVideo ?? null);
       })
       .catch((loadError: unknown) => {
         setError(loadError instanceof Error ? loadError.message : String(loadError));
@@ -143,12 +155,14 @@ export function App() {
           segments={manifest.videoSegments}
           currentRaceTimeMs={currentRaceTimeMs}
           isPlaying={isPlaying}
+          expandedVideo={expandedVideo}
           onRaceTimeChange={(nextRaceTimeMs) =>
             setRaceTimeFromSource("video", nextRaceTimeMs)
           }
           onPlayingChange={(nextIsPlaying) =>
             setPlayingFromSource("video", nextIsPlaying)
           }
+          onExpandedVideoChange={setExpandedVideo}
         />
 
         <WindHistoryPanel
@@ -182,6 +196,15 @@ export function App() {
           setPlayingFromSource("timeline", nextIsPlaying)
         }
         onHistoryDurationChange={setHistoryDurationMinutes}
+        onShare={() =>
+          copyToClipboard(
+            buildShareUrl({
+              raceTimeMs: currentRaceTimeMs,
+              historyDurationMinutes,
+              expandedVideo,
+            }),
+          )
+        }
       />
       <AppFooter />
     </main>
@@ -215,6 +238,29 @@ function getPlaybackRange(
     startTimeMs,
     endTimeMs,
   };
+}
+
+async function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  // Fallback for non-secure contexts (e.g. dev server opened via LAN IP).
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.style.position = "fixed";
+  textArea.style.opacity = "0";
+  document.body.appendChild(textArea);
+  textArea.select();
+
+  try {
+    if (!document.execCommand("copy")) {
+      throw new Error("Copy command was rejected");
+    }
+  } finally {
+    document.body.removeChild(textArea);
+  }
 }
 
 function clamp(value: number, lower: number, upper: number): number {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { VideoSegment } from "../types/race";
 import { findNextSegment } from "../playback/findSegmentForTime";
 import { getMediaBaseUrl, resolveRelativeUrl } from "../data/url";
@@ -7,14 +7,18 @@ import { formatDateTime } from "../utils/formatDateTime";
 const DEBUG_PLAYBACK = false;
 const DEFAULT_PAN_ANGLE = 0;
 
+export type ExpandedVideo = "camera" | "satellite" | null;
+
 type RaceVideoPanelProps = {
   raceName: string;
   manifestUrl: string;
   segments: VideoSegment[];
   currentRaceTimeMs: number;
   isPlaying: boolean;
+  expandedVideo: ExpandedVideo;
   onRaceTimeChange: (raceTimeMs: number) => void;
   onPlayingChange: (isPlaying: boolean) => void;
+  onExpandedVideoChange: (expandedVideo: ExpandedVideo) => void;
 };
 
 export function RaceVideoPanel({
@@ -23,17 +27,16 @@ export function RaceVideoPanel({
   segments,
   currentRaceTimeMs,
   isPlaying,
+  expandedVideo,
   onRaceTimeChange,
   onPlayingChange,
+  onExpandedVideoChange,
 }: RaceVideoPanelProps) {
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const satelliteVideoRef = useRef<HTMLVideoElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const suppressVideoTimeUpdatesRef = useRef(false);
   const lastLoggedVideoSecondRef = useRef<number | null>(null);
-  const [expandedVideo, setExpandedVideo] = useState<"camera" | "satellite" | null>(
-    null,
-  );
   const cameraCardRef = useRef<HTMLDivElement | null>(null);
   const satelliteCardRef = useRef<HTMLDivElement | null>(null);
 
@@ -425,14 +428,13 @@ export function RaceVideoPanel({
           <div className="panel-header video-sub-header">
             <div>
               <h2>{raceName} (Onboard Camera)</h2>
-              <div className="panel-subtitle">{getVideoFileName(activeSegment.videoUrl)}</div>
             </div>
             <div className="video-controls">
               {hasSatelliteVideo && (
                 <button
                   type="button"
                   onClick={() =>
-                    setExpandedVideo((current) => (current === "camera" ? null : "camera"))
+                    onExpandedVideoChange(expandedVideo === "camera" ? null : "camera")
                   }
                 >
                   {expandedVideo === "camera" ? "Show both" : "Expand"}
@@ -458,18 +460,13 @@ export function RaceVideoPanel({
           <div ref={satelliteCardRef} className="video-card fullscreen-video-card">
             <div className="panel-header video-sub-header">
               <div>
-                <h2>Satellite &amp; Wind Overlay</h2>
-                <div className="panel-subtitle">
-                  {getVideoFileName(activeSegment.satelliteVideoUrl ?? "")}
-                </div>
+                <h2>Satellite &amp; Wind</h2>
               </div>
               <div className="video-controls">
                 <button
                   type="button"
                   onClick={() =>
-                    setExpandedVideo((current) =>
-                      current === "satellite" ? null : "satellite",
-                    )
+                    onExpandedVideoChange(expandedVideo === "satellite" ? null : "satellite")
                   }
                 >
                   {expandedVideo === "satellite" ? "Show both" : "Expand"}
@@ -493,10 +490,6 @@ export function RaceVideoPanel({
       </div>
     </section>
   );
-}
-
-function getVideoFileName(videoUrl: string): string {
-  return videoUrl.split("/").pop() ?? videoUrl;
 }
 
 function findBestSegmentForTime(

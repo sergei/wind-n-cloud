@@ -305,6 +305,10 @@ button:hover {
   background: #122238;
 }
 
+.share-button {
+  min-width: 7.5rem;
+}
+
 .current-time-display {
   min-width: 15rem;
   text-align: right;
@@ -331,7 +335,8 @@ button:hover {
 .twd-line-port {
   fill: none;
   stroke: #ff3b30;
-  stroke-width: 2.5;
+  stroke-width: 1.5;
+  stroke-opacity: 0.55;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
@@ -339,7 +344,8 @@ button:hover {
 .twd-line-starboard {
   fill: none;
   stroke: #35d05f;
-  stroke-width: 2.5;
+  stroke-width: 1.5;
+  stroke-opacity: 0.55;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
@@ -347,9 +353,37 @@ button:hover {
 .tws-line {
   fill: none;
   stroke: #ffffff;
-  stroke-width: 2.5;
+  stroke-width: 1.5;
+  stroke-opacity: 0.55;
   stroke-linejoin: round;
   stroke-linecap: round;
+}
+
+.wind-smooth-line {
+  fill: none;
+  stroke: #ffcc66;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.trend-label {
+  fill: #ffcc66;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.trend-label-steady {
+  fill: #9fb4ca;
+}
+
+.trend-symbol {
+  font-size: 0.95rem;
+}
+
+.trend-change {
+  font-weight: 400;
+  fill: #9fb4ca;
 }
 
 .timeline-scale {

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { extent } from "d3-array";
 import { scaleLinear } from "d3-scale";
 import { line } from "d3-shape";
+import { findIndexAtOrBefore, smoothWindSamples } from "../data/windSamples";
 import type { WindSamplesColumnar } from "../types/race";
 
 type WindHistoryPanelProps = {
@@ -24,6 +25,13 @@ type ColoredPathSegment = {
   points: PlotPoint[];
 };
 
+type WindTrend = {
+  symbol: string;
+  label: string;
+  change: string;
+  isSteady: boolean;
+};
+
 type PaddedDomainOptions = {
   minimumSpan: number;
   paddingRatio: number;
@@ -33,11 +41,11 @@ type PaddedDomainOptions = {
 };
 
 const WIDTH = 420;
-const HEIGHT = 620;
+const HEIGHT = 652;
 const MARGIN = {
   top: 32,
   right: 24,
-  bottom: 32,
+  bottom: 64,
   left: 48,
 };
 
@@ -45,17 +53,28 @@ const INNER_WIDTH = WIDTH - MARGIN.left - MARGIN.right;
 const INNER_HEIGHT = HEIGHT - MARGIN.top - MARGIN.bottom;
 const PANEL_GAP = 36;
 const SUBPLOT_WIDTH = (INNER_WIDTH - PANEL_GAP) / 2;
+const SMOOTHING_TIME_CONSTANT_SECONDS = 5 * 60;
+const TREND_WINDOW_MINUTES = 5;
+const TWD_STEADY_THRESHOLD_DEGREES = 2;
+const TWS_STEADY_THRESHOLD_KNOTS = 0.3;
 
 export function WindHistoryPanel({
   samples,
   currentRaceTimeMs,
   historyDurationMinutes,
 }: WindHistoryPanelProps) {
-  const { twdPoints, twsPoints } = useMemo(() => {
+  const smoothed = useMemo(
+    () => smoothWindSamples(samples, SMOOTHING_TIME_CONSTANT_SECONDS),
+    [samples],
+  );
+
+  const { twdPoints, twsPoints, twdSmoothPoints, twsSmoothPoints } = useMemo(() => {
     const windowStartMs = currentRaceTimeMs - historyDurationMinutes * 60_000;
 
     const twd: PlotPoint[] = [];
     const tws: PlotPoint[] = [];
+    const twdSmooth: PlotPoint[] = [];
+    const twsSmooth: PlotPoint[] = [];
 
     for (let index = 0; index < samples.timeMs.length; index += 1) {
       const sampleTimeMs = samples.timeMs[index];
@@ -68,6 +87,8 @@ export function WindHistoryPanel({
       const twdValue = samples.twd[index];
       const twsValue = samples.tws[index];
       const twaValue = samples.twa?.[index] ?? null;
+      const twdSmoothValue = smoothed.twd[index];
+      const twsSmoothValue = smoothed.tws[index];
 
       if (twdValue !== null && twdValue !== undefined) {
         twd.push({
@@ -83,13 +104,29 @@ export function WindHistoryPanel({
           value: twsValue,
         });
       }
+
+      if (twdSmoothValue !== null) {
+        twdSmooth.push({
+          ageMinutes,
+          value: twdSmoothValue,
+        });
+      }
+
+      if (twsSmoothValue !== null) {
+        twsSmooth.push({
+          ageMinutes,
+          value: twsSmoothValue,
+        });
+      }
     }
 
     return {
       twdPoints: twd,
       twsPoints: tws,
+      twdSmoothPoints: twdSmooth,
+      twsSmoothPoints: twsSmooth,
     };
-  }, [currentRaceTimeMs, historyDurationMinutes, samples]);
+  }, [currentRaceTimeMs, historyDurationMinutes, samples, smoothed]);
 
   const yScale = scaleLinear()
     .domain([0, historyDurationMinutes])
@@ -118,12 +155,27 @@ export function WindHistoryPanel({
 
   const twdPathSegments = buildColoredTwdSegments(twdPoints);
   const twsPath = buildPath(twsPoints, twsScale, yScale);
+  const twdSmoothPath = buildPath(twdSmoothPoints, twdScale, yScale);
+  const twsSmoothPath = buildPath(twsSmoothPoints, twsScale, yScale);
   const twdCurrent = getCurrentValue(twdPoints);
   const twsCurrent = getCurrentValue(twsPoints);
   const twdMedian = calculateCircularMedianDegrees(twdPoints.map((point) => point.value));
   const twsMedian = calculateMedian(twsPoints.map((point) => point.value));
   const twdTitle = `TWD ${formatTwdValue(twdCurrent)} · med ${formatTwdValue(twdMedian)}`;
   const twsTitle = `TWS ${formatTwsValue(twsCurrent)} · med ${formatTwsValue(twsMedian)}`;
+
+  const { twdTrend, twsTrend } = useMemo(() => {
+    const currentIndex = findIndexAtOrBefore(samples.timeMs, currentRaceTimeMs);
+    const pastIndex = findIndexAtOrBefore(
+      samples.timeMs,
+      currentRaceTimeMs - TREND_WINDOW_MINUTES * 60_000,
+    );
+
+    return {
+      twdTrend: buildTwdTrend(smoothed.twd[currentIndex], smoothed.twd[pastIndex]),
+      twsTrend: buildTwsTrend(smoothed.tws[currentIndex], smoothed.tws[pastIndex]),
+    };
+  }, [currentRaceTimeMs, samples, smoothed]);
 
   const ageTicks = buildAgeTicks(historyDurationMinutes);
   const twdTicks = buildValueTicks(twdDomain);
@@ -177,7 +229,9 @@ export function WindHistoryPanel({
               />
             ))}
 
+            <path className="wind-smooth-line" d={twdSmoothPath} />
             <rect className="plot-border" width={SUBPLOT_WIDTH} height={INNER_HEIGHT} />
+            <TrendIndicator trend={twdTrend} />
           </g>
 
           <g transform={`translate(${SUBPLOT_WIDTH + PANEL_GAP}, 0)`}>
@@ -195,12 +249,73 @@ export function WindHistoryPanel({
             ))}
 
             <path className="tws-line" d={twsPath} />
+            <path className="wind-smooth-line" d={twsSmoothPath} />
             <rect className="plot-border" width={SUBPLOT_WIDTH} height={INNER_HEIGHT} />
+            <TrendIndicator trend={twsTrend} />
           </g>
         </g>
       </svg>
     </section>
   );
+}
+
+function TrendIndicator({ trend }: { trend: WindTrend | null }) {
+  if (!trend) {
+    return null;
+  }
+
+  return (
+    <text
+      className={trend.isSteady ? "trend-label trend-label-steady" : "trend-label"}
+      x={SUBPLOT_WIDTH / 2}
+      y={INNER_HEIGHT + 48}
+      textAnchor="middle"
+    >
+      <tspan className="trend-symbol">{trend.symbol}</tspan> {trend.label}
+      <tspan className="trend-change"> {trend.change}</tspan>
+    </text>
+  );
+}
+
+function buildTwdTrend(
+  current: number | null | undefined,
+  past: number | null | undefined,
+): WindTrend | null {
+  if (current === null || current === undefined || past === null || past === undefined) {
+    return null;
+  }
+
+  // Positive = clockwise shift = veering.
+  const delta = Math.round(((current - past + 540) % 360) - 180);
+  const change = `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(0)}° / ${TREND_WINDOW_MINUTES} min`;
+
+  if (Math.abs(delta) < TWD_STEADY_THRESHOLD_DEGREES) {
+    return { symbol: "•", label: "Steady", change, isSteady: true };
+  }
+
+  return delta > 0
+    ? { symbol: "↻", label: "Veering", change, isSteady: false }
+    : { symbol: "↺", label: "Backing", change, isSteady: false };
+}
+
+function buildTwsTrend(
+  current: number | null | undefined,
+  past: number | null | undefined,
+): WindTrend | null {
+  if (current === null || current === undefined || past === null || past === undefined) {
+    return null;
+  }
+
+  const delta = Math.round((current - past) * 10) / 10;
+  const change = `${delta >= 0 ? "+" : "−"}${Math.abs(delta).toFixed(1)} kt / ${TREND_WINDOW_MINUTES} min`;
+
+  if (Math.abs(delta) < TWS_STEADY_THRESHOLD_KNOTS) {
+    return { symbol: "•", label: "Steady", change, isSteady: true };
+  }
+
+  return delta > 0
+    ? { symbol: "▲", label: "Building", change, isSteady: false }
+    : { symbol: "▼", label: "Easing", change, isSteady: false };
 }
 
 function buildColoredTwdSegments(points: PlotPoint[]): ColoredPathSegment[] {
