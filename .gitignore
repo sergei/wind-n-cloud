@@ -218,3 +218,6 @@ __marimo__/
 .streamlit/secrets.toml
 /web/node_modules/
 /scripts/rose.py
+
+# Large GOES satellite sample images
+data-processing/sample-data/goes/
