@@ -437,7 +437,7 @@ export function RaceVideoPanel({
                     onExpandedVideoChange(expandedVideo === "camera" ? null : "camera")
                   }
                 >
-                  {expandedVideo === "camera" ? "Show both" : "Expand"}
+                  {expandedVideo === "camera" ? "Show satellite" : "Expand"}
                 </button>
               )}
               <button type="button" onClick={() => handleToggleFullscreen("camera")}>
@@ -469,7 +469,7 @@ export function RaceVideoPanel({
                     onExpandedVideoChange(expandedVideo === "satellite" ? null : "satellite")
                   }
                 >
-                  {expandedVideo === "satellite" ? "Show both" : "Expand"}
+                  {expandedVideo === "satellite" ? "Show camera" : "Expand"}
                 </button>
                 <button type="button" onClick={() => handleToggleFullscreen("satellite")}>
                   Fullscreen
