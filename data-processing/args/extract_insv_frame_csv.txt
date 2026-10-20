@@ -1,4 +1,4 @@
---csv=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/20-DATA/2026-pac-cup-2.csv
+--csv=/Users/sergei/SailingVideos/2026-PACCUP-2026/20-DATA/2026-paccup-ydvr-3-1s.csv
 --output=/Volumes/Elements/SailinVideos6/2026-PAC-CUP/20-DATA/clouds.csv
 /Volumes/Elements/SailinVideos6/2026-PAC-CUP/10-FOOTAGE/10-INSTA360/20-TIMELAPSE
 --input-timezone=America/Los_Angeles

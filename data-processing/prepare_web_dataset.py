@@ -569,6 +569,9 @@ def upload_json_outputs(
     uploaded_keys: list[str] = []
 
     for file_path in sorted(output_dir.rglob("*.json")):
+        if file_path.name.startswith("._"):
+            continue
+
         relative_key = file_path.relative_to(output_dir).as_posix()
         key = public_url_join(s3_prefix or None, relative_key)
         cache_control = "no-cache,no-store,must-revalidate"

@@ -7,3 +7,4 @@
 --aws-profile=sailvue
 --s3-bucket=wind-n-cloud-media-992382765816-us-east-1
 --public-satellite-prefix=video/goes
+--aws-region=us-east-1
