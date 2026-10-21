@@ -48,6 +48,8 @@ export type WindSamplesColumnar = {
   awa?: Array<number | null>;
   aws?: Array<number | null>;
   twa?: Array<number | null>;
+  lat?: Array<number | null>;
+  lon?: Array<number | null>;
 };
 
 export type WindSampleAtTime = {

@@ -2,7 +2,12 @@ import { useMemo } from "react";
 import { extent } from "d3-array";
 import { scaleLinear } from "d3-scale";
 import { line } from "d3-shape";
-import { findIndexAtOrBefore, smoothWindSamples } from "../data/windSamples";
+import {
+  findIndexAtOrBefore,
+  getTackFromTwa,
+  smoothWindSamples,
+  type Tack,
+} from "../data/windSamples";
 import type { WindSamplesColumnar } from "../types/race";
 
 type WindHistoryPanelProps = {
@@ -10,8 +15,6 @@ type WindHistoryPanelProps = {
   currentRaceTimeMs: number;
   historyDurationMinutes: number;
 };
-
-type Tack = "port" | "starboard";
 
 type PlotPoint = {
   ageMinutes: number;
@@ -53,8 +56,8 @@ const INNER_WIDTH = WIDTH - MARGIN.left - MARGIN.right;
 const INNER_HEIGHT = HEIGHT - MARGIN.top - MARGIN.bottom;
 const PANEL_GAP = 36;
 const SUBPLOT_WIDTH = (INNER_WIDTH - PANEL_GAP) / 2;
-const SMOOTHING_TIME_CONSTANT_SECONDS = 5 * 60;
-const TREND_WINDOW_MINUTES = 5;
+const SMOOTHING_TIME_CONSTANT_SECONDS = 1 * 60;
+const TREND_WINDOW_MINUTES = 1;
 const TWD_STEADY_THRESHOLD_DEGREES = 2;
 const TWS_STEADY_THRESHOLD_KNOTS = 0.3;
 
@@ -157,12 +160,8 @@ export function WindHistoryPanel({
   const twsPath = buildPath(twsPoints, twsScale, yScale);
   const twdSmoothPath = buildPath(twdSmoothPoints, twdScale, yScale);
   const twsSmoothPath = buildPath(twsSmoothPoints, twsScale, yScale);
-  const twdCurrent = getCurrentValue(twdPoints);
-  const twsCurrent = getCurrentValue(twsPoints);
-  const twdMedian = calculateCircularMedianDegrees(twdPoints.map((point) => point.value));
-  const twsMedian = calculateMedian(twsPoints.map((point) => point.value));
-  const twdTitle = `TWD ${formatTwdValue(twdCurrent)} · med ${formatTwdValue(twdMedian)}`;
-  const twsTitle = `TWS ${formatTwsValue(twsCurrent)} · med ${formatTwsValue(twsMedian)}`;
+  const twdTitle = `TWD ${formatTwdValue(getCurrentValue(twdSmoothPoints))}`;
+  const twsTitle = `TWS ${formatTwsValue(getCurrentValue(twsSmoothPoints))}`;
 
   const { twdTrend, twsTrend } = useMemo(() => {
     const currentIndex = findIndexAtOrBefore(samples.timeMs, currentRaceTimeMs);
@@ -341,14 +340,6 @@ function buildColoredTwdSegments(points: PlotPoint[]): ColoredPathSegment[] {
   return segments.filter((segment) => segment.points.length >= 2);
 }
 
-function getTackFromTwa(twa: number | null | undefined): Tack {
-  if (twa === null || twa === undefined) {
-    return "starboard";
-  }
-
-  return twa > 180 ? "port" : "starboard";
-}
-
 function buildPath(
   points: PlotPoint[],
   xScale: (value: number) => number,
@@ -367,62 +358,6 @@ function getCurrentValue(points: PlotPoint[]): number | undefined {
   }
 
   return points[points.length - 1]?.value;
-}
-
-function calculateMedian(values: number[]): number | undefined {
-  if (values.length === 0) {
-    return undefined;
-  }
-
-  const sorted = [...values].sort((left, right) => left - right);
-  const middleIndex = Math.floor(sorted.length / 2);
-
-  if (sorted.length % 2 === 1) {
-    return sorted[middleIndex];
-  }
-
-  return (sorted[middleIndex - 1] + sorted[middleIndex]) / 2;
-}
-
-function calculateCircularMedianDegrees(values: number[]): number | undefined {
-  if (values.length === 0) {
-    return undefined;
-  }
-
-  const reference = calculateCircularMeanDegrees(values);
-  const unwrappedValues = values.map((value) => unwrapAngleAroundReference(value, reference));
-  const unwrappedMedian = calculateMedian(unwrappedValues);
-
-  if (unwrappedMedian === undefined) {
-    return undefined;
-  }
-
-  return normalizeDegrees(unwrappedMedian);
-}
-
-function calculateCircularMeanDegrees(values: number[]): number {
-  const sineSum = values.reduce(
-    (sum, value) => sum + Math.sin((normalizeDegrees(value) * Math.PI) / 180),
-    0,
-  );
-  const cosineSum = values.reduce(
-    (sum, value) => sum + Math.cos((normalizeDegrees(value) * Math.PI) / 180),
-    0,
-  );
-
-  if (Math.abs(sineSum) < 1e-12 && Math.abs(cosineSum) < 1e-12) {
-    return normalizeDegrees(values[0] ?? 0);
-  }
-
-  return normalizeDegrees((Math.atan2(sineSum, cosineSum) * 180) / Math.PI);
-}
-
-function unwrapAngleAroundReference(value: number, reference: number): number {
-  const normalizedValue = normalizeDegrees(value);
-  const normalizedReference = normalizeDegrees(reference);
-  const delta = ((normalizedValue - normalizedReference + 540) % 360) - 180;
-
-  return normalizedReference + delta;
 }
 
 function normalizeDegrees(value: number): number {

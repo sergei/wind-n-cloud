@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { TimelineBand, TimelineBands } from "../playback/timelineBands";
 import { formatDateTime } from "../utils/formatDateTime";
 const DEBUG_PLAYBACK = false;
 
@@ -9,6 +10,7 @@ type TimelineControlsProps = {
   isPlaying: boolean;
   historyDurationMinutes: number;
   availableHistoryDurationsMinutes: number[];
+  bands: TimelineBands;
   onRaceTimeChange: (raceTimeMs: number) => void;
   onPlayingChange: (isPlaying: boolean) => void;
   onHistoryDurationChange: (durationMinutes: number) => void;
@@ -22,6 +24,7 @@ export function TimelineControls({
   isPlaying,
   historyDurationMinutes,
   availableHistoryDurationsMinutes,
+  bands,
   onRaceTimeChange,
   onPlayingChange,
   onHistoryDurationChange,
@@ -141,15 +144,43 @@ export function TimelineControls({
         <div className="current-time-display">{formatDateTime(currentRaceTimeMs)}</div>
       </div>
 
-      <input
-        className="race-time-slider"
-        type="range"
-        min={0}
-        max={durationSeconds}
-        step={1}
-        value={currentOffsetSeconds}
-        onChange={(event) => handleOffsetChange(Number(event.target.value))}
-      />
+      <div className="timeline-track">
+        <div className="timeline-bands" aria-hidden="true">
+          {bands.daylight.length > 0 && (
+            <div className="timeline-lane timeline-lane-daylight">
+              {renderBands(bands.daylight, "daylight", startTimeMs, endTimeMs)}
+            </div>
+          )}
+          <div className="timeline-lane timeline-lane-tack">
+            {renderBands(bands.tack, "tack", startTimeMs, endTimeMs)}
+            {renderBands(bands.gaps, "gap", startTimeMs, endTimeMs)}
+          </div>
+        </div>
+
+        <input
+          className="race-time-slider"
+          type="range"
+          min={0}
+          max={durationSeconds}
+          step={1}
+          value={currentOffsetSeconds}
+          onChange={(event) => handleOffsetChange(Number(event.target.value))}
+        />
+      </div>
+
+      <div className="timeline-legend">
+        <LegendItem className="timeline-band-tack-port" label="Port" />
+        <LegendItem className="timeline-band-tack-starboard" label="Starboard" />
+        {bands.daylight.length > 0 && (
+          <>
+            <LegendItem className="timeline-band-daylight-day" label="Day" />
+            <LegendItem className="timeline-band-daylight-twilight" label="Twilight" />
+            <LegendItem className="timeline-band-daylight-night" label="Night" />
+          </>
+        )}
+        <LegendItem className="timeline-band-gap-no-video" label="No video" />
+        <LegendItem className="timeline-band-gap-no-data" label="No data" />
+      </div>
 
       <div className="timeline-scale">
         <span className="timeline-scale-start">{formatDateTime(startTimeMs)}</span>
@@ -160,16 +191,46 @@ export function TimelineControls({
   );
 }
 
+function renderBands<Kind extends string>(
+  bands: TimelineBand<Kind>[],
+  lane: string,
+  startTimeMs: number,
+  endTimeMs: number,
+) {
+  const spanMs = Math.max(1, endTimeMs - startTimeMs);
+
+  return bands.map((band) => (
+    <div
+      key={`${lane}-${band.kind}-${band.startMs}`}
+      className={`timeline-band timeline-band-${lane}-${band.kind}`}
+      style={{
+        left: `${((band.startMs - startTimeMs) / spanMs) * 100}%`,
+        width: `${((band.endMs - band.startMs) / spanMs) * 100}%`,
+      }}
+    />
+  ));
+}
+
+function LegendItem({ className, label }: { className: string; label: string }) {
+  return (
+    <span className="timeline-legend-item">
+      <span className={`timeline-legend-swatch ${className}`} />
+      {label}
+    </span>
+  );
+}
+
 function clamp(value: number, lower: number, upper: number): number {
   return Math.min(Math.max(value, lower), upper);
 }
 
 function formatDuration(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3600);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
-  return `${hours.toString().padStart(2, "0")}:${minutes
+  return `${days}d ${hours.toString().padStart(2, "0")}:${minutes
     .toString()
     .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 }

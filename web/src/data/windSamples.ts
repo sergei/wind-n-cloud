@@ -1,5 +1,15 @@
 import type { WindSampleAtTime, WindSamplesColumnar } from "../types/race";
 
+export type Tack = "port" | "starboard";
+
+export function getTackFromTwa(twa: number | null | undefined): Tack {
+  if (twa === null || twa === undefined) {
+    return "starboard";
+  }
+
+  return twa > 180 ? "port" : "starboard";
+}
+
 export function findNearestWindSample(
   samples: WindSamplesColumnar,
   raceTimeMs: number,

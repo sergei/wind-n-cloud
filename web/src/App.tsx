@@ -4,6 +4,7 @@ import { TimelineControls } from "./components/TimelineControls";
 import { WindHistoryPanel } from "./components/WindHistoryPanel";
 import { loadRaceDataset, type LoadedRaceDataset } from "./data/loadRaceDataset";
 import { buildShareUrl, getManifestUrl, getSharedViewState } from "./data/url";
+import { buildTimelineBands } from "./playback/timelineBands";
 import type { VideoSegment } from "./types/race";
 import { formatDateTime } from "./utils/formatDateTime";
 
@@ -96,6 +97,19 @@ export function App() {
     return getPlaybackRange(dataset.manifest.videoSegments);
   }, [dataset]);
 
+  const timelineBands = useMemo(() => {
+    if (!dataset || !playbackRange) {
+      return null;
+    }
+
+    return buildTimelineBands(
+      dataset.windSamples,
+      dataset.manifest.videoSegments,
+      playbackRange.startTimeMs,
+      playbackRange.endTimeMs,
+    );
+  }, [dataset, playbackRange]);
+
   useEffect(() => {
     if (!DEBUG_PLAYBACK || currentRaceTimeMs === null) {
       return;
@@ -132,7 +146,7 @@ export function App() {
     );
   }
 
-  if (!playbackRange) {
+  if (!playbackRange || !timelineBands) {
     return (
       <main className="app-shell">
         <div className="error-state">
@@ -185,6 +199,7 @@ export function App() {
         availableHistoryDurationsMinutes={
           manifest.defaults.availableWindHistoryDurationsMinutes
         }
+        bands={timelineBands}
         onRaceTimeChange={(nextRaceTimeMs) => {
           setPlayingFromSource("timeline", false);
           setRaceTimeFromSource(

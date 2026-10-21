@@ -175,6 +175,8 @@ def read_frame_csv(csv_path: Path) -> list[dict[str, Any]]:
                     "awa": parse_optional_float(row.get("AWA")),
                     "aws": parse_optional_float(row.get("AWS")),
                     "twa": parse_optional_float(row.get("TWA(med)")),
+                    "lat": parse_optional_float(row.get("Latitude")),
+                    "lon": parse_optional_float(row.get("Longitude")),
                 }
             )
 
@@ -457,6 +459,8 @@ def build_wind_samples(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "awa": [row["awa"] for row in rows],
         "aws": [row["aws"] for row in rows],
         "twa": [row["twa"] for row in rows],
+        "lat": [row["lat"] for row in rows],
+        "lon": [row["lon"] for row in rows],
     }
 
 
@@ -529,6 +533,8 @@ def build_manifest(
                 "awa",
                 "aws",
                 "twa",
+                "lat",
+                "lon",
             ],
         },
         "videoSegments": segments,

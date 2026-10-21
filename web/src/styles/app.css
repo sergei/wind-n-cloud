@@ -316,8 +316,153 @@ button:hover {
   color: #e5eef7;
 }
 
+/* The bands are inset by half the thumb width so a band edge sits exactly
+   where the thumb centre lands at that time. */
+.timeline-track {
+  --timeline-thumb-width: 8px;
+  position: relative;
+  height: 26px;
+}
+
+.timeline-bands {
+  position: absolute;
+  inset: 0 calc(var(--timeline-thumb-width) / 2);
+  pointer-events: none;
+}
+
+.timeline-lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  background: rgba(138, 163, 189, 0.15);
+}
+
+.timeline-lane-daylight {
+  top: 0;
+  height: 5px;
+  border-radius: 2px;
+}
+
+.timeline-lane-tack {
+  top: 7px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.timeline-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.timeline-band-daylight-day {
+  background: rgba(255, 214, 120, 0.85);
+}
+
+.timeline-band-daylight-twilight {
+  background: #7c8fc9;
+}
+
+.timeline-band-daylight-night {
+  background: #4b4fa8;
+}
+
+.timeline-band-tack-port {
+  background: rgba(255, 59, 48, 0.7);
+}
+
+.timeline-band-tack-starboard {
+  background: rgba(53, 208, 95, 0.7);
+}
+
+.timeline-band-tack-unknown {
+  background: rgba(138, 163, 189, 0.35);
+}
+
+.timeline-band-gap-no-video {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(6, 16, 29, 0.95) 0 3px,
+    rgba(138, 163, 189, 0.45) 3px 6px
+  );
+}
+
+.timeline-band-gap-no-data {
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(229, 238, 247, 0.5) 0 2px,
+    transparent 2px 5px
+  );
+}
+
 .race-time-slider {
+  position: absolute;
+  inset: 0;
   width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.race-time-slider:focus-visible {
+  outline: 2px solid rgba(111, 182, 255, 0.6);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.race-time-slider::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+.race-time-slider::-moz-range-track {
+  height: 100%;
+  background: transparent;
+}
+
+.race-time-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--timeline-thumb-width);
+  height: 24px;
+  margin-top: 1px;
+  border: none;
+  border-radius: 3px;
+  background: #e5eef7;
+  box-shadow: 0 0 0 2px rgba(6, 16, 29, 0.85);
+}
+
+.race-time-slider::-moz-range-thumb {
+  width: var(--timeline-thumb-width);
+  height: 24px;
+  border: none;
+  border-radius: 3px;
+  background: #e5eef7;
+  box-shadow: 0 0 0 2px rgba(6, 16, 29, 0.85);
+}
+
+.timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+  color: #8aa3bd;
+  font-size: 0.72rem;
+}
+
+.timeline-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.timeline-legend-swatch {
+  width: 14px;
+  height: 8px;
+  border-radius: 2px;
+  outline: 1px solid rgba(138, 163, 189, 0.3);
 }
 
 .loading-state,
