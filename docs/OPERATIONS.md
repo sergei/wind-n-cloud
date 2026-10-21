@@ -23,8 +23,17 @@ aws s3 sync /Volumes/Elements/SailinVideos6/2026-PAC-CUP/00-WEB-APP \
 
 ### Upload data files
 
-- Generate and upload the dataset with `prepare_web_dataset.py --upload-to-s3`.
-- Use `--aws-profile`, `--s3-bucket`, and optionally `--cloudfront-distribution-id`.
+```bash
+python3 data-processing/prepare_web_dataset.py @data-processing/args/prepare_web_dataset.txt
+```
+
+- This regenerates `manifest.json` and `data/wind-samples.json` in the race media folder and uploads both
+  with `--upload-to-s3`.
+- The manifest is uploaded `no-cache` and the data `max-age=60`, so no CloudFront invalidation is needed.
+
+### Deploy the web app
+
+Push to `master`. The `Deploy web app` workflow runs for changes under `web/**`.
 
 ## Rollback
 
@@ -48,6 +57,5 @@ aws s3 sync /Volumes/Elements/SailinVideos6/2026-PAC-CUP/00-WEB-APP \
 ## Troubleshooting
 
 - **403 from S3/CloudFront**: check the CloudFront distribution, bucket policy, and OAC settings.
-- **Missing data**: confirm the upload workflow ran and the bucket contains the JSON files.
 - **Missing data**: confirm `prepare_web_dataset.py --upload-to-s3` ran and the bucket contains the JSON files.
 - **Wrong manifest URL**: confirm `VITE_DEFAULT_MANIFEST_URL` points to the CloudFront manifest.
