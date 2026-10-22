@@ -20,6 +20,8 @@ type PlotPoint = {
   ageMinutes: number;
   value: number;
   twa?: number | null;
+  // Smoothed value at the same time, used to unwrap TWD and to spot outliers.
+  reference?: number | null;
 };
 
 type ColoredPathSegment = {
@@ -60,6 +62,11 @@ const SMOOTHING_TIME_CONSTANT_SECONDS = 1 * 60;
 const TREND_WINDOW_MINUTES = 1;
 const TWD_STEADY_THRESHOLD_DEGREES = 2;
 const TWS_STEADY_THRESHOLD_KNOTS = 0.3;
+// Raw samples further than this many robust standard deviations (1.4826 × MAD
+// of the residuals from the smoothed line) are left out of the axis range.
+const OUTLIER_THRESHOLD_SIGMAS = 5;
+const TWD_MIN_OUTLIER_DEVIATION_DEGREES = 15;
+const TWS_MIN_OUTLIER_DEVIATION_KNOTS = 3;
 
 export function WindHistoryPanel({
   samples,
@@ -78,6 +85,9 @@ export function WindHistoryPanel({
     const tws: PlotPoint[] = [];
     const twdSmooth: PlotPoint[] = [];
     const twsSmooth: PlotPoint[] = [];
+    // TWD is unwrapped as it is collected (oldest first), so a wind near north
+    // plots as e.g. -3° next to 5° instead of jumping across the 0-360 axis.
+    let twdAnchor: number | undefined;
 
     for (let index = 0; index < samples.timeMs.length; index += 1) {
       const sampleTimeMs = samples.timeMs[index];
@@ -87,17 +97,20 @@ export function WindHistoryPanel({
       }
 
       const ageMinutes = (currentRaceTimeMs - sampleTimeMs) / 60_000;
-      const twdValue = samples.twd[index];
       const twsValue = samples.tws[index];
       const twaValue = samples.twa?.[index] ?? null;
-      const twdSmoothValue = smoothed.twd[index];
       const twsSmoothValue = smoothed.tws[index];
+      const twdSmoothValue = unwrapAngle(smoothed.twd[index], twdAnchor);
+      twdAnchor = twdSmoothValue ?? twdAnchor;
+      const twdValue = unwrapAngle(samples.twd[index], twdAnchor);
+      twdAnchor = twdSmoothValue ?? twdValue ?? twdAnchor;
 
       if (twdValue !== null && twdValue !== undefined) {
         twd.push({
           ageMinutes,
           value: twdValue,
           twa: twaValue,
+          reference: twdSmoothValue,
         });
       }
 
@@ -105,6 +118,7 @@ export function WindHistoryPanel({
         tws.push({
           ageMinutes,
           value: twsValue,
+          reference: twsSmoothValue,
         });
       }
 
@@ -135,14 +149,20 @@ export function WindHistoryPanel({
     .domain([0, historyDurationMinutes])
     .range([0, INNER_HEIGHT]);
 
-  const currentTwdExtent = extent(twdPoints, (point) => point.value);
-  const currentTwsExtent = extent(twsPoints, (point) => point.value);
+  const currentTwdExtent = buildRobustExtent(
+    twdPoints,
+    twdSmoothPoints,
+    TWD_MIN_OUTLIER_DEVIATION_DEGREES,
+  );
+  const currentTwsExtent = buildRobustExtent(
+    twsPoints,
+    twsSmoothPoints,
+    TWS_MIN_OUTLIER_DEVIATION_KNOTS,
+  );
 
   const twdDomain = buildPaddedDomain(currentTwdExtent[0], currentTwdExtent[1], {
     minimumSpan: 10,
     paddingRatio: 0.12,
-    lowerBound: 0,
-    upperBound: 360,
     roundToIncrement: 5,
   });
 
@@ -188,6 +208,11 @@ export function WindHistoryPanel({
         role="img"
         aria-label="Wind history plot"
       >
+        <defs>
+          <clipPath id="wind-subplot-clip">
+            <rect width={SUBPLOT_WIDTH} height={INNER_HEIGHT} />
+          </clipPath>
+        </defs>
         <g transform={`translate(${MARGIN.left}, ${MARGIN.top})`}>
           {ageTicks.map((tick) => (
             <g key={tick} transform={`translate(0, ${yScale(tick)})`}>
@@ -211,24 +236,26 @@ export function WindHistoryPanel({
               <g key={tick} transform={`translate(${twdScale(tick)}, 0)`}>
                 <line className="vertical-grid-line" x1={0} x2={0} y1={0} y2={INNER_HEIGHT} />
                 <text className="x-label" x={0} y={INNER_HEIGHT + 20} textAnchor="middle">
-                  {formatTick(tick)}
+                  {formatTick(normalizeDegrees(tick))}
                 </text>
               </g>
             ))}
 
-            {twdPathSegments.map((segment) => (
-              <path
-                key={segment.key}
-                className={
-                  segment.tack === "port"
-                    ? "twd-line-port"
-                    : "twd-line-starboard"
-                }
-                d={buildPath(segment.points, twdScale, yScale)}
-              />
-            ))}
+            <g clipPath="url(#wind-subplot-clip)">
+              {twdPathSegments.map((segment) => (
+                <path
+                  key={segment.key}
+                  className={
+                    segment.tack === "port"
+                      ? "twd-line-port"
+                      : "twd-line-starboard"
+                  }
+                  d={buildPath(segment.points, twdScale, yScale)}
+                />
+              ))}
 
-            <path className="wind-smooth-line" d={twdSmoothPath} />
+              <path className="wind-smooth-line" d={twdSmoothPath} />
+            </g>
             <rect className="plot-border" width={SUBPLOT_WIDTH} height={INNER_HEIGHT} />
             <TrendIndicator trend={twdTrend} />
           </g>
@@ -247,8 +274,10 @@ export function WindHistoryPanel({
               </g>
             ))}
 
-            <path className="tws-line" d={twsPath} />
-            <path className="wind-smooth-line" d={twsSmoothPath} />
+            <g clipPath="url(#wind-subplot-clip)">
+              <path className="tws-line" d={twsPath} />
+              <path className="wind-smooth-line" d={twsSmoothPath} />
+            </g>
             <rect className="plot-border" width={SUBPLOT_WIDTH} height={INNER_HEIGHT} />
             <TrendIndicator trend={twsTrend} />
           </g>
@@ -350,6 +379,64 @@ function buildPath(
       .x((point) => xScale(point.value))
       .y((point) => yScale(point.ageMinutes))(points) ?? ""
   );
+}
+
+// Shifts an angle by a multiple of 360 so it is within 180 of the anchor.
+function unwrapAngle(
+  value: number | null | undefined,
+  anchor: number | undefined,
+): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (anchor === undefined) {
+    return value;
+  }
+
+  return anchor + ((((value - anchor) % 360) + 540) % 360) - 180;
+}
+
+// Value range for the axis: the whole smoothed line plus the raw samples that
+// are not outliers. A raw sample is an outlier when its distance from the
+// smoothed line exceeds both minimumDeviation and OUTLIER_THRESHOLD_SIGMAS
+// robust standard deviations of all such distances in the window. Outliers
+// still get drawn, but they run off the edge of the plot instead of
+// stretching the axis.
+function buildRobustExtent(
+  rawPoints: PlotPoint[],
+  smoothPoints: PlotPoint[],
+  minimumDeviation: number,
+): [number | undefined, number | undefined] {
+  const deviations = rawPoints
+    .filter((point) => point.reference !== null && point.reference !== undefined)
+    .map((point) => Math.abs(point.value - (point.reference as number)))
+    .sort((a, b) => a - b);
+  const medianDeviation = deviations[Math.floor(deviations.length / 2)] ?? 0;
+  const threshold = Math.max(
+    minimumDeviation,
+    OUTLIER_THRESHOLD_SIGMAS * 1.4826 * medianDeviation,
+  );
+
+  const inliers = rawPoints.filter(
+    (point) =>
+      point.reference === null ||
+      point.reference === undefined ||
+      Math.abs(point.value - point.reference) <= threshold,
+  );
+
+  const [rawMin, rawMax] = extent(inliers, (point) => point.value);
+  const [smoothMin, smoothMax] = extent(smoothPoints, (point) => point.value);
+
+  return [minDefined(rawMin, smoothMin), maxDefined(rawMax, smoothMax)];
+}
+
+function minDefined(a: number | undefined, b: number | undefined): number | undefined {
+  return a === undefined ? b : b === undefined ? a : Math.min(a, b);
+}
+
+function maxDefined(a: number | undefined, b: number | undefined): number | undefined {
+  return a === undefined ? b : b === undefined ? a : Math.max(a, b);
 }
 
 function getCurrentValue(points: PlotPoint[]): number | undefined {
